@@ -7,7 +7,7 @@ Switch to another app or walk away from the laptop: the work keeps going.
 ## Install
 
 ```
-/plugin marketplace add <github-user>/jaagte-raho
+/plugin marketplace add vibhusharma101/jaagte-raho
 /plugin install jaagte-raho@jaagte-raho
 ```
 
