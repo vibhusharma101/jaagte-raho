@@ -17,4 +17,16 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      # Desktop users may inhibit sleep by default; the CI user has no logged-in session, so grant it.
+      - name: Allow the CI user to inhibit sleep
+        if: runner.os == 'Linux'
+        run: |
+          sudo tee /etc/polkit-1/rules.d/50-ci-inhibit.rules >/dev/null <<'EOF'
+          polkit.addRule(function (action, subject) {
+            if (action.id.indexOf("org.freedesktop.login1.inhibit-") === 0 && subject.user === "runner") {
+              return polkit.Result.YES;
+            }
+          });
+          EOF
+          sudo systemctl restart polkit
       - run: bash tests/e2e.sh
