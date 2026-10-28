@@ -23,10 +23,12 @@ case "$(uname -s)" in
 esac
 
 # Walk up the process tree to the Claude process (native binary "claude", or "node" for npm installs).
+# Match on argv[0] as well as comm: on Linux, newer Node renames its main thread, so comm is "MainThread".
 pid=$$
 while [ "${pid:-0}" -gt 1 ]; do
   comm=$(ps -o comm= -p "$pid")
-  case "${comm##*/}" in claude|node) break ;; esac
+  argv0=$(ps -o args= -p "$pid"); argv0=${argv0%% *}
+  case "${comm##*/} ${argv0##*/}" in claude\ *|node\ *|*\ claude|*\ node) break ;; esac
   pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
 done
 [ "${pid:-0}" -gt 1 ] || report "error: Claude process not found"
