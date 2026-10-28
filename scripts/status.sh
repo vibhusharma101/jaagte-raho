@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Lists every jaagte-raho lock on this machine, whether it is really held, and what the OS reports.
+# Lists every jaagte-raho session on this machine, whether Claude is working in it, and whether the
+# keep-awake lock is held, plus what the OS itself reports.
 
 . "$(dirname "$0")/lockdir.sh"
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) win=1 ;; *) win= ;; esac
@@ -15,14 +16,17 @@ found=
 for f in "$dir"/jaagte-raho-*.pid; do
   [ -f "$f" ] || continue
   found=1
-  claude=${f##*/jaagte-raho-}; claude=${claude%.pid}
-  holder=$(cat "$f")
-  alive "$claude" && c=running || c=gone
-  alive "$holder" && h=running || h=gone
-  if [ "$c$h" = runningrunning ]; then state="AWAKE (lock held)"; else state="STALE (lock not held)"; fi
-  echo "Claude PID $claude: $c | watcher PID $holder: $h | $state"
+  base=${f%.pid}
+  sid=${base##*/jaagte-raho-}
+  watcher=$(cat "$f")
+  alive "$watcher" && w=running || w=gone
+  [ -f "$base.busy" ] && busy=working || busy=idle
+  if [ "$w" = running ] && [ -f "$base.held" ]; then state="AWAKE (lock held)"
+  elif [ "$w" = running ]; then state="may sleep (lock not held)"
+  else state="STALE (watcher gone)"; fi
+  echo "Session ${sid:0:8}: Claude $busy | watcher PID $watcher $w | $state"
 done
-[ -n "$found" ] || echo "No sessions are holding the computer awake."
+[ -n "$found" ] || echo "No sessions are being watched."
 
 for f in "$dir"/jaagte-raho-*.err "$dir"/jaagte-raho-*.log; do
   [ -s "$f" ] && echo "Last error (${f##*/}): $(head -n1 "$f")"
