@@ -31,8 +31,9 @@ while [ "${pid:-0}" -gt 1 ]; do
 done
 [ "${pid:-0}" -gt 1 ] || report "error: Claude process not found"
 
-tmp="${TMPDIR:-/tmp}"
-base="${tmp%/}/jaagte-raho-$pid"
+. "$root/scripts/lockdir.sh"
+[ -n "$dir" ] || report "error: no private directory for lock files"
+base="$dir/jaagte-raho-$pid"
 [ -f "$base.pid" ] && kill -0 "$(cat "$base.pid")" 2>/dev/null && report ok
 
 case "$(uname -s)" in

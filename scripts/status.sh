@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Lists every jaagte-raho lock on this machine, whether it is really held, and what the OS reports.
 
-case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*) win=1; dir=$(cygpath -u "$TEMP") ;;
-  *) win=; dir="${TMPDIR:-/tmp}"; dir=${dir%/} ;;
-esac
+. "$(dirname "$0")/lockdir.sh"
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) win=1 ;; *) win= ;; esac
+[ -n "$dir" ] || { echo "No private directory for lock files (see README, Troubleshooting)."; exit 0; }
 
 alive() {
   if [ -n "$win" ]; then tasklist //NH //FI "PID eq $1" 2>/dev/null | grep -q " $1 "

@@ -7,9 +7,11 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 fail() { echo "FAIL: $*"; exit 1; }
 
+. "$root/scripts/lockdir.sh"
+[ -n "$dir" ] || fail "no private directory for lock files"
 case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*) win=1; dir=$(cygpath -u "$TEMP"); native() { cygpath -w "$1"; } ;;
-  *) win=; dir="${TMPDIR:-/tmp}"; dir=${dir%/}; native() { echo "$1"; } ;;
+  MINGW*|MSYS*|CYGWIN*) win=1; native() { cygpath -w "$1"; } ;;
+  *) win=; native() { echo "$1"; } ;;
 esac
 
 alive() {

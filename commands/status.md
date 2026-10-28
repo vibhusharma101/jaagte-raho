@@ -1,6 +1,6 @@
 ---
 description: Check whether jaagte-raho is keeping this computer awake
-allowed-tools: Bash(bash:*)
+allowed-tools: Bash(bash *scripts/status.sh*)
 ---
 
 !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/status.sh"`
