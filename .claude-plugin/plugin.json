@@ -1,0 +1,8 @@
+{
+  "name": "jaagte-raho",
+  "version": "0.1.0",
+  "description": "Keeps your computer awake while a Claude Code session is running, then lets it sleep normally.",
+  "author": { "name": "Vibhu Sharma" },
+  "license": "MIT",
+  "keywords": ["sleep", "caffeinate", "keep-awake", "power"]
+}

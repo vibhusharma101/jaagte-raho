@@ -1,0 +1,11 @@
+{
+  "name": "jaagte-raho",
+  "owner": { "name": "Vibhu Sharma" },
+  "plugins": [
+    {
+      "name": "jaagte-raho",
+      "source": "./",
+      "description": "Keeps your computer awake while a Claude Code session is running."
+    }
+  ]
+}
