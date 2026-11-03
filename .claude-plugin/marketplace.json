@@ -5,7 +5,7 @@
     {
       "name": "jaagte-raho",
       "source": "./",
-      "description": "Keeps your computer awake while a Claude Code session is running."
+      "description": "Keeps your computer awake only while Claude Code is working, then lets it sleep."
     }
   ]
 }

@@ -33,17 +33,28 @@ fi
 base="$dir/jaagte-raho-$sid"
 
 case "$1" in
-  busy) : > "$base.busy"; exit 0 ;;
+  busy)
+    : > "$base.busy"
+    # The start of the prompt, so /jaagte-raho:status can say what each session is doing.
+    # Escaped backslashes and quotes are swapped for control characters while the string is cut out.
+    printf '%s' "$input" | sed 's/\\\\/\x02/g; s/\\"/\x01/g' \
+      | sed -n 's/.*"prompt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 \
+      | sed 's/\\[nrt]/ /g; s/\x01/"/g; s/\x02/\\/g; s/[[:space:]]\{1,\}/ /g' | cut -c1-80 > "$base.task"
+    exit 0 ;;
   stop)
     # A non-empty background_tasks list means agents or commands are still running.
     printf '%s' "$input" | grep -Eq '"background_tasks"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]' \
       || rm -f "$base.busy"
     exit 0 ;;
   idle) rm -f "$base.busy"; exit 0 ;;
-  end) rm -f "$base.busy" "$base.pid"; exit 0 ;;
+  end) rm -f "$base.busy" "$base.pid" "$base.cwd" "$base.task"; exit 0 ;;
   start) ;;
   *) exit 0 ;;
 esac
+
+# The folder Claude was started in, so /jaagte-raho:status can name the session.
+printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 \
+  | sed 's/\\\\/\//g' > "$base.cwd"
 
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)

@@ -1,8 +1,8 @@
 {
   "name": "jaagte-raho",
-  "version": "0.1.0",
-  "description": "Keeps your computer awake while a Claude Code session is running, then lets it sleep normally.",
+  "version": "0.1.1",
+  "description": "Keeps your computer awake only while Claude Code is working, and lets it sleep normally the moment Claude is idle.",
   "author": { "name": "vibhusharma101" },
   "license": "MIT",
-  "keywords": ["sleep", "caffeinate", "keep-awake", "power"]
+  "keywords": ["claude-code", "keep-awake", "sleep", "caffeinate", "power", "macos", "windows", "linux"]
 }

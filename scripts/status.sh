@@ -11,22 +11,39 @@ alive() {
   else kill -0 "$1" 2>/dev/null; fi
 }
 
+mtime() { if [ "$(uname -s)" = Darwin ]; then stat -f %m "$1"; else stat -c %Y "$1"; fi; }
+
+ago() {
+  local s=$(( $(date +%s) - $(mtime "$1") ))
+  if [ "$s" -lt 60 ]; then echo "${s}s ago"
+  elif [ "$s" -lt 3600 ]; then echo "$(( s / 60 ))m ago"
+  else echo "$(( s / 3600 ))h ago"; fi
+}
+
 echo "OS: $(uname -s)"
-found=
+echo "Each session holds its own lock. The computer stays awake while any session shows AWAKE."
+found= stale=0
 for f in "$dir"/jaagte-raho-*.pid; do
   [ -f "$f" ] || continue
-  found=1
   base=${f%.pid}
   sid=${base##*/jaagte-raho-}
   watcher=$(cat "$f")
-  alive "$watcher" && w=running || w=gone
+  # A watcher that is gone holds nothing: drop its leftover files instead of listing them.
+  if ! alive "$watcher"; then
+    rm -f "$base".pid "$base".busy "$base".held "$base".cwd "$base".task
+    stale=$((stale + 1))
+    continue
+  fi
+  found=1
+  folder=$(cat "$base.cwd" 2>/dev/null); folder=${folder%/}
   [ -f "$base.busy" ] && busy=working || busy=idle
-  if [ "$w" = running ] && [ -f "$base.held" ]; then state="AWAKE (lock held)"
-  elif [ "$w" = running ]; then state="may sleep (lock not held)"
-  else state="STALE (watcher gone)"; fi
-  echo "Session ${sid:0:8}: Claude $busy | watcher PID $watcher $w | $state"
+  [ -f "$base.held" ] && state="AWAKE (lock held)" || state="may sleep (lock not held)"
+  echo "Session ${sid:0:8}${folder:+ (${folder##*/})}: Claude $busy | watcher PID $watcher | $state"
+  [ -n "$folder" ] && echo "  folder: $folder"
+  [ -s "$base.task" ] && echo "  last prompt ($(ago "$base.task")): \"$(cat "$base.task")\""
 done
 [ -n "$found" ] || echo "No sessions are being watched."
+[ "$stale" -eq 0 ] || echo "Removed leftover files from $stale ended session(s)."
 
 for f in "$dir"/jaagte-raho-*.err "$dir"/jaagte-raho-*.log; do
   [ -s "$f" ] && echo "Last error (${f##*/}): $(head -n1 "$f")"

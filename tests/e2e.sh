@@ -89,7 +89,7 @@ hook_event stop "$sid" ',"background_tasks":[]'
 wait_for 10 not_held || fail "lock still held after the turn finished"
 pass "turn finished with nothing in the background: lock released"
 
-bash "$root/scripts/status.sh" | grep -q "Session ${sid:0:8}: Claude idle" || fail "status command does not show the idle session"
+bash "$root/scripts/status.sh" | grep -Eq "Session ${sid:0:8}( (.*))?: Claude idle" || fail "status command does not show the idle session"
 pass "status command reports the session"
 
 hook_event busy "$sid"
