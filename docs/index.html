@@ -147,7 +147,7 @@
   <div class="top">
     <div>
       <h1>Awake <em>while Claude works</em>. Asleep when it's done.</h1>
-      <p class="lede">A Claude Code plugin. Give Claude a long task and walk away: your <span data-t="device">computer</span> won't sleep mid-task, and sleeps normally once Claude is idle. No config.</p>
+      <p class="lede">A Claude Code plugin that stops your <span data-t="device">computer</span> sleeping mid-task.</p>
 
       <div class="install">
         <button class="copy" type="button" data-copy="/plugin marketplace add vibhusharma101/jaagte-raho&#10;/plugin install jaagte-raho@jaagte-raho">Copy</button>
@@ -165,25 +165,24 @@
     </div>
 
     <div class="tl" role="img" aria-label="Timeline comparison. With no help, the computer sleeps partway through the task and the task stops. With an always-on tool, it stays awake long after Claude is done. With jaagte-raho, it is awake only while Claude and its background agents are working.">
-      <h2>One afternoon, three ways</h2>
       <div class="row">
-        <div class="row-name">No help <small>Your normal sleep timer</small></div>
+        <div class="row-name">No help</div>
         <div class="bar">
           <div class="s sleep" style="flex: 8">idle</div>
           <div class="s awake" style="flex: 22">Claude working</div>
-          <div class="s dead" style="flex: 70">asleep, task stopped</div>
+          <div class="s dead" style="flex: 70">asleep, task killed</div>
         </div>
       </div>
       <div class="row">
-        <div class="row-name"><span data-t="tool">Always-on tools</span> <small>You switch it on and off</small></div>
+        <div class="row-name"><span data-t="tool">Always-on tools</span></div>
         <div class="bar">
           <div class="s waste" style="flex: 8"></div>
           <div class="s awake" style="flex: 30">Claude working</div>
-          <div class="s waste" style="flex: 62"><span class="chip">awake for nothing, until you remember</span></div>
+          <div class="s waste" style="flex: 62"><span class="chip">awake for nothing</span></div>
         </div>
       </div>
       <div class="row">
-        <div class="row-name">jaagte-raho <small>Follows Claude by itself</small></div>
+        <div class="row-name">jaagte-raho</div>
         <div class="bar">
           <div class="s sleep" style="flex: 8">idle</div>
           <div class="s awake" style="flex: 30">Claude working</div>
@@ -192,13 +191,6 @@
           <div class="s sleep" style="flex: 20">sleeps</div>
         </div>
       </div>
-      <div class="legend">
-        <span><i class="sw" style="background: var(--awake)"></i>Awake, doing work</span>
-        <span><i class="sw" style="background: repeating-linear-gradient(135deg, var(--awake) 0 3px, var(--accent-soft) 3px 6px)"></i>Awake for nothing</span>
-        <span><i class="sw" style="background: var(--sleep)"></i>Allowed to sleep</span>
-        <span><i class="sw" style="border: 1px solid var(--dead)"></i>Task stopped</span>
-      </div>
-      <p class="how" data-t="how">Uses each OS's own keep-awake lock, switched on and off by Claude Code's hooks.</p>
     </div>
   </div>
 
@@ -206,26 +198,26 @@
     <div class="list does">
       <h2>What it does</h2>
       <ul>
-        <li><span><b>Stays awake while Claude works</b>, background agents included</span></li>
-        <li><span><b>Sleeps again within seconds</b> of Claude finishing</span></li>
-        <li><span><b>Lets go if Claude crashes</b>: nothing left holding it awake</span></li>
-        <li><span><b>Handles many sessions</b>: awake while any one is working</span></li>
+        <li>Stays awake while Claude works</li>
+        <li>Sleeps again when Claude is done</li>
+        <li>Covers background agents</li>
+        <li>Safe if Claude crashes</li>
       </ul>
     </div>
     <div class="list doesnt">
       <h2>What it doesn't do</h2>
       <ul>
-        <li><span><b>Stop sleep when you close the lid</b>: <span data-t="lid">that's your OS lid setting</span></span></li>
-        <li><span><b>Keep it awake while Claude sits idle</b>, even with sessions open</span></li>
-        <li><span><b>Anything for Claude Code on the web</b>: that runs in the cloud</span></li>
-        <li><span data-t="limit"><b>Need admin rights or config</b>: there's nothing to set up</span></li>
+        <li>Stop sleep when you close the lid</li>
+        <li>Keep it awake while Claude is idle</li>
+        <li>Need setup or admin rights</li>
+        <li data-t="limit">Help with Claude Code on the web</li>
       </ul>
     </div>
   </div>
 </main>
 
 <footer>
-  <span><b>जागते रहो</b> (<i>jaagte raho</i>): "stay awake", the call of India's night watchmen.</span>
+  <span><b>जागते रहो</b>: "stay awake"</span>
   <span><a href="https://github.com/vibhusharma101/jaagte-raho#readme">Docs</a> · <a href="https://github.com/vibhusharma101/jaagte-raho/issues">Issues</a> · Not affiliated with Anthropic</span>
 </footer>
 
@@ -236,34 +228,26 @@
     all: {
       device: 'computer',
       tool: 'Always-on tools',
-      how: 'Uses each OS\'s own keep-awake lock (caffeinate, PowerSetRequest, systemd-inhibit), switched by Claude Code\'s hooks.',
-      lid: 'that\'s your OS lid setting',
       req: 'macOS, Windows, Linux',
-      limit: '<b>Need admin rights or config</b>: there\'s nothing to set up'
+      limit: 'Help with Claude Code on the web'
     },
     mac: {
       device: 'Mac',
       tool: 'caffeinate / Amphetamine',
-      how: 'Uses macOS\'s own caffeinate, tied to Claude\'s process and switched on and off by Claude Code\'s hooks.',
-      lid: 'it sleeps unless on power with a display',
-      req: 'works on macOS',
-      limit: '<b>Need admin rights or config</b>: nothing to install'
+      req: 'macOS',
+      limit: 'Help with Claude Code on the web'
     },
     win: {
       device: 'PC',
       tool: 'PowerToys Awake',
-      how: 'Uses Windows\' own PowerSetRequest lock, switched on and off by Claude Code\'s hooks.',
-      lid: 'set the lid action to "Do nothing"',
-      req: 'works on Windows',
-      limit: '<b>Need admin rights or config</b>: Git Bash is enough'
+      req: 'Windows',
+      limit: 'Help with Claude Code on the web'
     },
     linux: {
       device: 'computer',
-      tool: 'Caffeine / manual inhibit',
-      how: 'Uses systemd-inhibit, switched on and off by Claude Code\'s hooks.',
-      lid: 'that\'s your logind lid setting',
-      req: 'Linux with systemd',
-      limit: '<b>Work without systemd</b> (yet)'
+      tool: 'Caffeine',
+      req: 'Linux',
+      limit: 'Work without systemd (yet)'
     }
   };
 
