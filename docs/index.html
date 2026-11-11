@@ -6,7 +6,7 @@
 <title>jaagte-raho</title>
 <meta name="description" content="A Claude Code plugin that keeps your computer awake only while Claude is working, and lets it sleep the moment Claude is idle. macOS, Windows, Linux. Zero config.">
 <meta property="og:title" content="jaagte-raho: keep your computer awake only while Claude Code is working">
-<meta property="og:description" content="Give Claude a long task and walk away. Your laptop stays awake while Claude works and sleeps when it's done. macOS, Windows, Linux. Zero config.">
+<meta property="og:description" content="Give Claude a long task and walk away. Your computer stays awake while Claude works and sleeps when it's done. macOS, Windows, Linux. Zero config.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://vibhusharma101.github.io/jaagte-raho/">
 <meta name="twitter:card" content="summary">
@@ -22,50 +22,28 @@
     --text: #1a1a1a;
     --muted: #5f5b53;
     --border: #e4dfd5;
-    --accent: #d9930f;
     --accent-strong: #b87a06;
     --accent-soft: #fbeccc;
     --awake: #f2b33d;
     --sleep: #d9d4ca;
     --dead: #d4483b;
+    --good: #2f8f4e;
     --code-bg: #1d1b18;
     --code-text: #f4efe6;
     --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #121110;
-      --surface: #1b1a18;
-      --surface-2: #23211e;
-      --text: #f1ede6;
-      --muted: #a8a196;
-      --border: #2f2c28;
-      --accent: #f2b33d;
-      --accent-strong: #f6c463;
-      --accent-soft: #3a2d12;
-      --awake: #f2b33d;
-      --sleep: #3a3732;
-      --dead: #e5675b;
-      --code-bg: #0b0a09;
-      --code-text: #f4efe6;
+      --bg: #121110; --surface: #1b1a18; --surface-2: #23211e; --text: #f1ede6; --muted: #a8a196;
+      --border: #2f2c28; --accent-strong: #f6c463; --accent-soft: #3a2d12; --awake: #f2b33d;
+      --sleep: #3a3732; --dead: #e5675b; --good: #5cc07c; --code-bg: #0b0a09; --code-text: #f4efe6;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
     }
   }
   :root[data-theme="dark"] {
-    --bg: #121110;
-    --surface: #1b1a18;
-    --surface-2: #23211e;
-    --text: #f1ede6;
-    --muted: #a8a196;
-    --border: #2f2c28;
-    --accent: #f2b33d;
-    --accent-strong: #f6c463;
-    --accent-soft: #3a2d12;
-    --awake: #f2b33d;
-    --sleep: #3a3732;
-    --dead: #e5675b;
-    --code-bg: #0b0a09;
-    --code-text: #f4efe6;
+    --bg: #121110; --surface: #1b1a18; --surface-2: #23211e; --text: #f1ede6; --muted: #a8a196;
+    --border: #2f2c28; --accent-strong: #f6c463; --accent-soft: #3a2d12; --awake: #f2b33d;
+    --sleep: #3a3732; --dead: #e5675b; --good: #5cc07c; --code-bg: #0b0a09; --code-text: #f4efe6;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
   }
 
@@ -75,383 +53,261 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   a { color: var(--accent-strong); }
-  code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
-  section { padding: 72px 0; }
-  h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0; }
-  h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 800; }
-  .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-strong); margin-bottom: 12px; }
-  .lede { color: var(--muted); font-size: 18px; max-width: 640px; margin: 16px 0 0; }
+  code { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
 
-  /* nav */
-  nav { border-bottom: 1px solid var(--border); }
-  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  /* One screen on laptops and desktops; scrolls only when the window is too small. */
+  .page { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  nav { display: flex; align-items: center; justify-content: space-between; height: 56px; flex: none; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
   .eye { width: 22px; height: 22px; border-radius: 50%; background: var(--awake); display: grid; place-items: center; }
   .eye::after { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #141414; }
-  .nav-links { display: flex; gap: 20px; align-items: center; }
-  .nav-links a { color: var(--muted); text-decoration: none; font-size: 15px; }
-  .nav-links a:hover { color: var(--text); }
-  @media (max-width: 640px) { .nav-links .hide-sm { display: none; } }
+  .os-pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .seg-ctl { display: flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .seg-ctl button { font: 500 13px Inter, sans-serif; color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .seg-ctl button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  @media (max-width: 560px) { .os-pick .label { display: none; } }
 
-  /* buttons */
-  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--border); color: var(--text); background: var(--surface); }
-  .btn:hover { border-color: var(--muted); }
-  .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-  .btn-primary:hover { opacity: .9; border-color: var(--text); }
-  .btn svg { width: 18px; height: 18px; }
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(16px, 3.5vh, 32px); padding: clamp(8px, 2vh, 24px) 0; }
 
-  /* hero */
-  .hero { padding: 88px 0 56px; }
-  .hero h1 { font-size: clamp(36px, 6.5vw, 64px); font-weight: 800; max-width: 820px; }
-  .hero h1 em { font-style: normal; background: linear-gradient(transparent 62%, var(--accent-soft) 62%); }
-  .hero .lede { font-size: clamp(17px, 2.2vw, 20px); }
-  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
-  .pill { font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: var(--surface); }
+  .top { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+  @media (max-width: 880px) { .top { grid-template-columns: 1fr; gap: 20px; } }
+  .top > *, .lists > * { min-width: 0; } /* let the install box scroll instead of widening the page */
 
-  /* install box */
-  .install { margin-top: 40px; background: var(--code-bg); color: var(--code-text); border-radius: 14px; padding: 20px; box-shadow: var(--shadow); max-width: 720px; position: relative; }
-  .install pre { margin: 0; font-size: 14.5px; line-height: 1.8; overflow-x: auto; padding-right: 72px; }
-  .install .prompt { color: #8c857a; user-select: none; }
-  .install .ok { color: #9ccf7a; }
-  .copy { position: absolute; top: 14px; right: 14px; font: 600 13px Inter, sans-serif; background: #2c2925; color: #f4efe6; border: 1px solid #3d3933; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  h1 { font-size: clamp(30px, 4vw, 42px); line-height: 1.1; letter-spacing: -0.025em; font-weight: 800; margin: 0; }
+  h1 em { font-style: normal; background: linear-gradient(transparent 62%, var(--accent-soft) 62%); }
+  .lede { color: var(--muted); font-size: 16.5px; margin: 14px 0 0; max-width: 520px; }
+
+  .install { margin-top: 20px; background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 14px 16px; position: relative; box-shadow: var(--shadow); }
+  .install pre { margin: 0; font: 13.5px/1.75 "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; overflow-x: auto; padding-right: 64px; }
+  .install .p { color: #8c857a; user-select: none; }
+  .copy { position: absolute; top: 12px; right: 12px; font: 600 12px Inter, sans-serif; background: #2c2925; color: #f4efe6; border: 1px solid #3d3933; border-radius: 7px; padding: 5px 9px; cursor: pointer; }
   .copy:hover { background: #3a3631; }
 
+  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; font-size: 14px; color: var(--muted); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 9px; font-weight: 600; font-size: 14px; text-decoration: none; background: var(--text); color: var(--bg); }
+  .btn:hover { opacity: .9; }
+  .btn svg { width: 16px; height: 16px; }
+
   /* timeline */
-  .timeline-card { margin-top: 40px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; box-shadow: var(--shadow); }
-  .tl-row { display: grid; grid-template-columns: 150px 1fr; gap: 16px; align-items: center; margin-bottom: 22px; }
-  .tl-row:last-of-type { margin-bottom: 8px; }
-  .tl-name { font-weight: 600; font-size: 15px; }
-  .tl-name small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
-  .bar { display: flex; height: 34px; border-radius: 8px; overflow: hidden; gap: 2px; }
-  .seg { display: flex; align-items: center; padding: 0 8px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2a2000; }
-  .seg.awake { background: var(--awake); }
-  .seg.sleep { background: var(--sleep); color: var(--muted); font-weight: 500; }
-  .seg.dead { background: repeating-linear-gradient(135deg, var(--dead) 0 6px, transparent 6px 12px); color: var(--dead); background-color: transparent; border: 1px solid var(--dead); font-weight: 600; }
-  .seg.waste { background: repeating-linear-gradient(135deg, var(--awake) 0 6px, var(--accent-soft) 6px 12px); }
-  .tl-axis { display: grid; grid-template-columns: 150px 1fr; gap: 16px; font-size: 12px; color: var(--muted); }
-  .tl-axis div:last-child { display: flex; justify-content: space-between; }
-  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
-  .legend span { display: inline-flex; align-items: center; gap: 8px; }
-  .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
-  @media (max-width: 640px) {
-    .tl-row, .tl-axis { grid-template-columns: 1fr; gap: 8px; }
-    .tl-axis div:first-child { display: none; }
-    .seg { font-size: 0; padding: 0; }
-  }
+  .tl { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow); }
+  .tl h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 16px; }
+  .row { margin-bottom: 14px; }
+  .row-name { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .row-name small { font-weight: 400; color: var(--muted); text-align: right; }
+  .bar { display: flex; height: 26px; border-radius: 7px; overflow: hidden; gap: 2px; }
+  .s { display: flex; align-items: center; padding: 0 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2a2000; }
+  .s.awake { background: var(--awake); }
+  .s.sleep { background: var(--sleep); color: var(--muted); font-weight: 500; }
+  .s.dead { border: 1px solid var(--dead); color: var(--dead); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--dead) 35%, transparent) 0 5px, transparent 5px 10px); }
+  .s.waste { background: repeating-linear-gradient(135deg, var(--awake) 0 5px, var(--accent-soft) 5px 10px); }
+  .s .chip { background: var(--surface); color: var(--text); font-weight: 500; padding: 1px 6px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .how { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
 
-  /* feature grid */
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 40px; }
-  @media (max-width: 860px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
-  .card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
-  .card p { margin: 0; color: var(--muted); font-size: 15px; }
-  .icon { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-strong); display: grid; place-items: center; margin-bottom: 14px; }
-  .icon svg { width: 20px; height: 20px; }
+  /* does / doesn't */
+  .lists { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .lists { grid-template-columns: 1fr; } }
+  .list { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  .list h2 { font-size: 15px; font-weight: 700; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .list ul { list-style: none; margin: 0; padding: 0; }
+  .list li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; font-size: 14px; padding: 4px 0; }
+  .list li::before { font-weight: 700; }
+  .does li::before { content: "✓"; color: var(--good); }
+  .doesnt li::before { content: "✕"; color: var(--dead); }
+  .list li span { color: var(--muted); }
+  .list li b { font-weight: 600; color: var(--text); }
 
-  /* comparison */
-  .compare { margin-top: 36px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); }
-  .compare-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 560px; }
-  th, td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  th { font-size: 13px; color: var(--muted); font-weight: 600; background: var(--surface-2); }
-  tr:last-child td { border-bottom: 0; }
-  td.us { background: var(--accent-soft); font-weight: 500; }
-  .yes { color: #2f8f4e; font-weight: 700; }
-  .no { color: var(--dead); font-weight: 700; }
-
-  /* how it works */
-  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 40px; counter-reset: step; }
-  @media (max-width: 860px) { .steps { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
-  .step { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
-  .step::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--text); color: var(--bg); font-weight: 700; font-size: 14px; margin-bottom: 12px; }
-  .step code { font-size: 13px; background: var(--surface-2); padding: 2px 6px; border-radius: 5px; }
-  .step p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
-  .os { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
-  @media (max-width: 640px) { .os { grid-template-columns: 1fr; } }
-  .os div { background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 14px 16px; font-size: 13.5px; }
-  .os b { display: block; font-family: Inter, sans-serif; font-size: 13px; color: #b9b1a4; font-weight: 600; margin-bottom: 4px; }
-
-  /* status */
-  .status { margin-top: 32px; background: var(--code-bg); color: var(--code-text); border-radius: 14px; padding: 20px; overflow-x: auto; font-size: 13.5px; line-height: 1.75; box-shadow: var(--shadow); }
-  .status .hl { color: var(--awake); font-weight: 500; }
-  .status .dim { color: #8c857a; }
-
-  /* faq */
-  details { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-top: 12px; }
-  details:first-of-type { margin-top: 32px; }
-  summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
-  summary::-webkit-details-marker { display: none; }
-  summary::after { content: "+"; color: var(--muted); font-weight: 400; font-size: 20px; line-height: 1; }
-  details[open] summary::after { content: "–"; }
-  details p { color: var(--muted); margin: 12px 0 0; }
-
-  /* name + final cta */
-  .name-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
-  .name-card .big { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; }
-  .name-card .big small { display: block; font-size: 15px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
-  .name-card p { margin: 0; color: var(--muted); font-size: 17px; }
-  @media (max-width: 640px) { .name-card { grid-template-columns: 1fr; padding: 24px; } }
-  .final { text-align: center; }
-  .final .lede { margin-left: auto; margin-right: auto; }
-  .final .cta { justify-content: center; }
-  .final .install { margin-left: auto; margin-right: auto; text-align: left; }
-
-  footer { border-top: 1px solid var(--border); padding: 28px 0; color: var(--muted); font-size: 14px; }
-  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+  footer { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 14px 0; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
   footer a { color: var(--muted); }
 </style>
 </head>
 <body>
+<div class="page">
 
 <nav>
-  <div class="wrap">
-    <a class="brand" href="#"><span class="eye" aria-hidden="true"></span>jaagte-raho</a>
-    <div class="nav-links">
-      <a class="hide-sm" href="#how">How it works</a>
-      <a class="hide-sm" href="#faq">FAQ</a>
-      <a href="https://github.com/vibhusharma101/jaagte-raho">GitHub</a>
+  <a class="brand" href="https://github.com/vibhusharma101/jaagte-raho"><span class="eye" aria-hidden="true"></span>jaagte-raho</a>
+  <div class="os-pick">
+    <span class="label">Showing for</span>
+    <div class="seg-ctl" role="group" aria-label="Operating system">
+      <button type="button" data-os="mac" aria-pressed="false">macOS</button>
+      <button type="button" data-os="win" aria-pressed="false">Windows</button>
+      <button type="button" data-os="linux" aria-pressed="false">Linux</button>
     </div>
   </div>
 </nav>
 
-<header class="hero">
-  <div class="wrap">
-    <div class="eyebrow">A Claude Code plugin</div>
-    <h1>Your laptop stays awake <em>while Claude works</em>. Then it sleeps.</h1>
-    <p class="lede">Give Claude a two-hour task and walk away. jaagte-raho keeps your computer from sleeping while Claude is working, and lets it sleep normally the moment Claude is done. No config, no admin rights, nothing to remember to switch off.</p>
+<main>
+  <div class="top">
+    <div>
+      <h1>Awake <em>while Claude works</em>. Asleep when it's done.</h1>
+      <p class="lede">A Claude Code plugin. Give Claude a long task and walk away: your <span data-t="device">computer</span> won't sleep mid-task, and sleeps normally once Claude is idle. No config.</p>
 
-    <div class="cta">
-      <a class="btn btn-primary" href="#install">Install in 10 seconds</a>
-      <a class="btn" href="https://github.com/vibhusharma101/jaagte-raho">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
-        Star on GitHub
-      </a>
+      <div class="install">
+        <button class="copy" type="button" data-copy="/plugin marketplace add vibhusharma101/jaagte-raho&#10;/plugin install jaagte-raho@jaagte-raho">Copy</button>
+<pre><span class="p">&gt; </span>/plugin marketplace add vibhusharma101/jaagte-raho
+<span class="p">&gt; </span>/plugin install jaagte-raho@jaagte-raho</pre>
+      </div>
+
+      <div class="cta">
+        <a class="btn" href="https://github.com/vibhusharma101/jaagte-raho">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+          Star on GitHub
+        </a>
+        <span>Free · MIT · <span data-t="req">macOS, Windows, Linux</span></span>
+      </div>
     </div>
-    <div class="pills">
-      <span class="pill">macOS</span><span class="pill">Windows</span><span class="pill">Linux</span><span class="pill">Zero config</span><span class="pill">MIT licensed</span>
-    </div>
 
-    <div class="install" id="install">
-      <button class="copy" data-copy="/plugin marketplace add vibhusharma101/jaagte-raho&#10;/plugin install jaagte-raho@jaagte-raho">Copy</button>
-<pre><span class="prompt">&gt; </span>/plugin marketplace add vibhusharma101/jaagte-raho
-<span class="prompt">&gt; </span>/plugin install jaagte-raho@jaagte-raho
-
-<span class="ok">jaagte-raho: on.</span> Keeps this computer awake while Claude is working, lets it sleep when idle</pre>
-    </div>
-  </div>
-</header>
-
-<section style="padding-top: 32px;">
-  <div class="wrap">
-    <div class="eyebrow">The problem</div>
-    <h2>Sleep mode doesn't know Claude is busy.</h2>
-    <p class="lede">Your OS sees no mouse or keyboard input and puts the machine to sleep, which stops the task with it. Keeping it awake all the time fixes that but drains your battery. jaagte-raho keeps it awake exactly as long as Claude is working.</p>
-
-    <div class="timeline-card" role="img" aria-label="Timeline comparison. Without help, the laptop sleeps 20 minutes into a task and the task dies. With an always-on tool, the laptop stays awake all day. With jaagte-raho, it is awake only while Claude works and background agents run, and sleeps otherwise.">
-      <div class="tl-row">
-        <div class="tl-name">Without help<small>Default sleep timer</small></div>
+    <div class="tl" role="img" aria-label="Timeline comparison. With no help, the computer sleeps partway through the task and the task stops. With an always-on tool, it stays awake long after Claude is done. With jaagte-raho, it is awake only while Claude and its background agents are working.">
+      <h2>One afternoon, three ways</h2>
+      <div class="row">
+        <div class="row-name">No help <small>Your normal sleep timer</small></div>
         <div class="bar">
-          <div class="seg sleep" style="flex: 8">idle</div>
-          <div class="seg awake" style="flex: 10">Claude working</div>
-          <div class="seg dead" style="flex: 82">slept, task stopped</div>
+          <div class="s sleep" style="flex: 8">idle</div>
+          <div class="s awake" style="flex: 22">Claude working</div>
+          <div class="s dead" style="flex: 70">asleep, task stopped</div>
         </div>
       </div>
-      <div class="tl-row">
-        <div class="tl-name">Always-on tools<small>caffeinate, Amphetamine…</small></div>
+      <div class="row">
+        <div class="row-name"><span data-t="tool">Always-on tools</span> <small>You switch it on and off</small></div>
         <div class="bar">
-          <div class="seg waste" style="flex: 8"></div>
-          <div class="seg awake" style="flex: 30">Claude working</div>
-          <div class="seg waste" style="flex: 62">awake for nothing, until you remember</div>
+          <div class="s waste" style="flex: 8"></div>
+          <div class="s awake" style="flex: 30">Claude working</div>
+          <div class="s waste" style="flex: 62"><span class="chip">awake for nothing, until you remember</span></div>
         </div>
       </div>
-      <div class="tl-row">
-        <div class="tl-name">jaagte-raho<small>Follows Claude</small></div>
+      <div class="row">
+        <div class="row-name">jaagte-raho <small>Follows Claude by itself</small></div>
         <div class="bar">
-          <div class="seg sleep" style="flex: 8">idle</div>
-          <div class="seg awake" style="flex: 30">Claude working</div>
-          <div class="seg sleep" style="flex: 14">sleeps</div>
-          <div class="seg awake" style="flex: 16">working</div>
-          <div class="seg awake" style="flex: 12">bg agents</div>
-          <div class="seg sleep" style="flex: 20">sleeps</div>
+          <div class="s sleep" style="flex: 8">idle</div>
+          <div class="s awake" style="flex: 30">Claude working</div>
+          <div class="s sleep" style="flex: 14">sleeps</div>
+          <div class="s awake" style="flex: 28">working + agents</div>
+          <div class="s sleep" style="flex: 20">sleeps</div>
         </div>
       </div>
-      <div class="tl-axis"><div></div><div><span>you send a prompt</span><span>…</span><span>you come back</span></div></div>
       <div class="legend">
-        <span><i class="sw" style="background: var(--awake)"></i>Kept awake, doing work</span>
-        <span><i class="sw" style="background: repeating-linear-gradient(135deg, var(--awake) 0 3px, var(--accent-soft) 3px 6px)"></i>Kept awake, nothing running</span>
+        <span><i class="sw" style="background: var(--awake)"></i>Awake, doing work</span>
+        <span><i class="sw" style="background: repeating-linear-gradient(135deg, var(--awake) 0 3px, var(--accent-soft) 3px 6px)"></i>Awake for nothing</span>
         <span><i class="sw" style="background: var(--sleep)"></i>Allowed to sleep</span>
-        <span><i class="sw" style="border: 1px solid var(--dead); background: repeating-linear-gradient(135deg, var(--dead) 0 3px, transparent 3px 6px)"></i>Task stopped by sleep</span>
+        <span><i class="sw" style="border: 1px solid var(--dead)"></i>Task stopped</span>
       </div>
+      <p class="how" data-t="how">Uses each OS's own keep-awake lock, switched on and off by Claude Code's hooks.</p>
     </div>
   </div>
-</section>
 
-<section>
-  <div class="wrap">
-    <div class="eyebrow">What you get</div>
-    <h2>Install it once and forget about it.</h2>
-    <div class="grid">
-      <div class="card">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
-        <h3>Awake only while working</h3>
-        <p>Held while a turn runs, including background agents and tasks that keep going after the turn ends.</p>
-      </div>
-      <div class="card">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></div>
-        <h3>Sleeps again by itself</h3>
-        <p>Within about 2 seconds of Claude finishing, or about 60 seconds after you interrupt a turn.</p>
-      </div>
-      <div class="card">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></div>
-        <h3>Safe if something crashes</h3>
-        <p>The lock is tied to the Claude process. If Claude exits or crashes, the OS releases it. Nothing is left holding your machine awake.</p>
-      </div>
-      <div class="card">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></svg></div>
-        <h3>Many sessions at once</h3>
-        <p>Each session holds its own lock. The machine stays awake while any of them is working, and four finished sessions left open overnight still let it sleep.</p>
-      </div>
-      <div class="card">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
-        <h3>macOS, Windows, Linux</h3>
-        <p>Uses each OS's own keep-awake API. Nothing extra to install, no admin rights. Tested in CI on all three.</p>
-      </div>
-      <div class="card">
-        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg></div>
-        <h3>Never fails silently</h3>
-        <p>Every session starts with a one-line check that the lock actually works on this machine. If it doesn't, it tells you why.</p>
-      </div>
+  <div class="lists">
+    <div class="list does">
+      <h2>What it does</h2>
+      <ul>
+        <li><span><b>Stays awake while Claude works</b>, background agents included</span></li>
+        <li><span><b>Sleeps again within seconds</b> of Claude finishing</span></li>
+        <li><span><b>Lets go if Claude crashes</b>: nothing left holding it awake</span></li>
+        <li><span><b>Handles many sessions</b>: awake while any one is working</span></li>
+      </ul>
+    </div>
+    <div class="list doesnt">
+      <h2>What it doesn't do</h2>
+      <ul>
+        <li><span><b>Stop sleep when you close the lid</b>: <span data-t="lid">that's your OS lid setting</span></span></li>
+        <li><span><b>Keep it awake while Claude sits idle</b>, even with sessions open</span></li>
+        <li><span><b>Anything for Claude Code on the web</b>: that runs in the cloud</span></li>
+        <li><span data-t="limit"><b>Need admin rights or config</b>: there's nothing to set up</span></li>
+      </ul>
     </div>
   </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="eyebrow">Compared</div>
-    <h2>Why not just use caffeinate?</h2>
-    <p class="lede">You can. But you have to guess how long Claude will take, and remember to turn it off.</p>
-    <div class="compare"><div class="compare-scroll">
-      <table>
-        <thead><tr><th></th><th>jaagte-raho</th><th>caffeinate / Amphetamine / PowerToys Awake</th></tr></thead>
-        <tbody>
-          <tr><td>Knows when Claude is working</td><td class="us"><span class="yes">Yes</span>, from Claude Code's own hooks</td><td><span class="no">No</span>, manual or fixed timer</td></tr>
-          <tr><td>Sleeps when Claude is done</td><td class="us"><span class="yes">Yes</span>, within seconds</td><td>When you turn it off, or the timer runs out</td></tr>
-          <tr><td>Covers background agents</td><td class="us"><span class="yes">Yes</span></td><td>Only if your guess was long enough</td></tr>
-          <tr><td>Several sessions at once</td><td class="us"><span class="yes">Yes</span>, one lock per session</td><td>One switch for everything</td></tr>
-          <tr><td>Works the same on all OSes</td><td class="us"><span class="yes">Yes</span>: macOS, Windows, Linux</td><td>Different tool on each OS</td></tr>
-          <tr><td>Something to remember</td><td class="us">Nothing</td><td>Turning it on, and off</td></tr>
-        </tbody>
-      </table>
-    </div></div>
-  </div>
-</section>
-
-<section id="how">
-  <div class="wrap">
-    <div class="eyebrow">How it works</div>
-    <h2>A few hooks and the OS's own lock.</h2>
-    <p class="lede">The hooks only create or delete a flag file, so your prompts are never slowed down.</p>
-    <div class="steps">
-      <div class="step"><code>SessionStart</code><p>Finds the Claude process and starts a small background watcher for this session.</p></div>
-      <div class="step"><code>UserPromptSubmit</code><p>Marks the session busy. The watcher takes the keep-awake lock.</p></div>
-      <div class="step"><code>Stop</code> · <code>idle_prompt</code><p>Clears busy once no background tasks are left. The lock is released and the machine can sleep.</p></div>
-      <div class="step"><code>SessionEnd</code><p>Stops the watcher. If Claude crashes instead, the OS cleans up anyway.</p></div>
-    </div>
-    <div class="os">
-      <div class="mono"><b>macOS</b>caffeinate -i -w &lt;claude pid&gt;</div>
-      <div class="mono"><b>Linux</b>systemd-inhibit --what=idle:sleep</div>
-      <div class="mono"><b>Windows</b>PowerSetRequest</div>
-    </div>
-
-    <h3 style="margin-top: 48px; font-size: 20px;">See exactly what it's doing</h3>
-    <p class="lede" style="font-size: 16px;">Run <code>/jaagte-raho:status</code> any time. It lists every session by folder and last prompt, and whether the lock is really held.</p>
-<pre class="status"><span class="dim">&gt;</span> /jaagte-raho:status
-
-Session d4bca0fb (session-city): Claude working | watcher PID 37516 | <span class="hl">AWAKE (lock held)</span>
-  folder: C:/Users/you/code/session-city
-  last prompt (2m ago): "Redo the labels so they don't overlap when 25 sessions are running"</pre>
-  </div>
-</section>
-
-<section id="faq">
-  <div class="wrap">
-    <div class="eyebrow">FAQ</div>
-    <h2>Good to know</h2>
-    <details>
-      <summary>Does it stop the laptop sleeping when I close the lid?</summary>
-      <p>No. The lid follows your OS lid setting, not the idle timer. On Windows, set Power Options → "Choose what closing the lid does" → Do nothing. On macOS, closing the lid sleeps the Mac unless it's on power with an external display.</p>
-    </details>
-    <details>
-      <summary>What happens while Claude waits for me to approve a tool?</summary>
-      <p>It stays awake, on purpose. The turn isn't over, and if you approve from your phone via Remote Control, a sleeping laptop couldn't continue.</p>
-    </details>
-    <details>
-      <summary>Does it drain my battery?</summary>
-      <p>Only while Claude is working, which is when you want the machine awake. Once Claude is idle, normal sleep comes back. On Windows, set <code>JAAGTE_RAHO_DISPLAY=0</code> to let the screen turn off while it works.</p>
-    </details>
-    <details>
-      <summary>Do I need it for Claude Code on the web?</summary>
-      <p>No. Cloud sessions run on Anthropic's servers. This is for local sessions: terminal, IDE and Remote Control.</p>
-    </details>
-    <details>
-      <summary>What do I need installed?</summary>
-      <p>Claude Code with plugin support. On Windows, Git Bash (already required by Claude Code) and Windows PowerShell. On Linux, systemd.</p>
-    </details>
-  </div>
-</section>
-
-<section style="padding-top: 24px;">
-  <div class="wrap">
-    <div class="name-card">
-      <div class="big">जागते रहो<small>jaagte raho · "stay awake"</small></div>
-      <p>The call of India's night watchmen as they walk their rounds. This plugin does the same job for your laptop, and only while Claude is working.</p>
-    </div>
-  </div>
-</section>
-
-<section class="final">
-  <div class="wrap">
-    <h2>Stop losing long runs to sleep mode.</h2>
-    <p class="lede">Free and open source. Two commands, then start a new session.</p>
-    <div class="install">
-      <button class="copy" data-copy="/plugin marketplace add vibhusharma101/jaagte-raho&#10;/plugin install jaagte-raho@jaagte-raho">Copy</button>
-<pre><span class="prompt">&gt; </span>/plugin marketplace add vibhusharma101/jaagte-raho
-<span class="prompt">&gt; </span>/plugin install jaagte-raho@jaagte-raho</pre>
-    </div>
-    <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/vibhusharma101/jaagte-raho">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
-        Star it on GitHub
-      </a>
-      <a class="btn" href="https://github.com/vibhusharma101/jaagte-raho/issues">Report an issue</a>
-    </div>
-  </div>
-</section>
+</main>
 
 <footer>
-  <div class="wrap">
-    <span>jaagte-raho · MIT license · by <a href="https://github.com/vibhusharma101">vibhusharma101</a></span>
-    <span>Not affiliated with Anthropic.</span>
-  </div>
+  <span><b>जागते रहो</b> (<i>jaagte raho</i>): "stay awake", the call of India's night watchmen.</span>
+  <span><a href="https://github.com/vibhusharma101/jaagte-raho#readme">Docs</a> · <a href="https://github.com/vibhusharma101/jaagte-raho/issues">Issues</a> · Not affiliated with Anthropic</span>
 </footer>
 
+</div>
+
 <script>
+  var OS_TEXT = {
+    all: {
+      device: 'computer',
+      tool: 'Always-on tools',
+      how: 'Uses each OS\'s own keep-awake lock (caffeinate, PowerSetRequest, systemd-inhibit), switched by Claude Code\'s hooks.',
+      lid: 'that\'s your OS lid setting',
+      req: 'macOS, Windows, Linux',
+      limit: '<b>Need admin rights or config</b>: there\'s nothing to set up'
+    },
+    mac: {
+      device: 'Mac',
+      tool: 'caffeinate / Amphetamine',
+      how: 'Uses macOS\'s own caffeinate, tied to Claude\'s process and switched on and off by Claude Code\'s hooks.',
+      lid: 'it sleeps unless on power with a display',
+      req: 'works on macOS',
+      limit: '<b>Need admin rights or config</b>: nothing to install'
+    },
+    win: {
+      device: 'PC',
+      tool: 'PowerToys Awake',
+      how: 'Uses Windows\' own PowerSetRequest lock, switched on and off by Claude Code\'s hooks.',
+      lid: 'set the lid action to "Do nothing"',
+      req: 'works on Windows',
+      limit: '<b>Need admin rights or config</b>: Git Bash is enough'
+    },
+    linux: {
+      device: 'computer',
+      tool: 'Caffeine / manual inhibit',
+      how: 'Uses systemd-inhibit, switched on and off by Claude Code\'s hooks.',
+      lid: 'that\'s your logind lid setting',
+      req: 'Linux with systemd',
+      limit: '<b>Work without systemd</b> (yet)'
+    }
+  };
+
+  function detectOS() {
+    var ua = navigator.userAgent || '';
+    var uaPlatform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    var mobile = (navigator.userAgentData && navigator.userAgentData.mobile) ||
+      /Android|iPhone|iPad|iPod|Mobile/i.test(ua) ||
+      (/Mac/i.test(uaPlatform) && navigator.maxTouchPoints > 1); // iPadOS reports itself as a Mac
+    if (mobile) return 'all';
+    if (/Win/i.test(uaPlatform) || /Windows/i.test(ua)) return 'win';
+    if (/Mac/i.test(uaPlatform) || /Macintosh/i.test(ua)) return 'mac';
+    if (/Linux|X11|CrOS/i.test(uaPlatform + ua)) return 'linux';
+    return 'all';
+  }
+
+  function show(os) {
+    var t = OS_TEXT[os] || OS_TEXT.all;
+    document.querySelectorAll('[data-t]').forEach(function (el) {
+      var v = t[el.getAttribute('data-t')];
+      if (v !== undefined) el.innerHTML = v;
+    });
+    document.querySelectorAll('.seg-ctl button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-os') === os ? 'true' : 'false');
+    });
+  }
+
+  document.querySelectorAll('.seg-ctl button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var os = b.getAttribute('aria-pressed') === 'true' ? 'all' : b.getAttribute('data-os');
+      show(os);
+    });
+  });
+  // ?os=mac|win|linux|all picks the version, e.g. for links in OS-specific posts.
+  var forced = (location.search.match(/[?&]os=(mac|win|linux|all)\b/) || [])[1];
+  show(forced || detectOS());
+
   document.querySelectorAll('.copy').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      var text = btn.getAttribute('data-copy');
-      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); };
+      var reset = function (label) { btn.textContent = label; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); };
       try {
-        navigator.clipboard.writeText(text).then(done, function () { btn.textContent = 'Select & copy'; });
+        navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () { reset('Copied'); }, function () { reset('Select & copy'); });
       } catch (e) {
-        btn.textContent = 'Select & copy';
+        reset('Select & copy');
       }
     });
   });
