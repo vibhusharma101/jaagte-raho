@@ -35,12 +35,23 @@ due() {
 
 mtime() { if [ "$(uname -s)" = Darwin ]; then stat -f %m "$1"; else stat -c %Y "$1"; fi; }
 
-# Claude has been waiting for your input past the grace period (see awake.sh wait). The transcript
+# Newest change to the session transcript or its subagents' (<session>/subagents/*.jsonl): a
+# subagent's permission prompt, once answered, only moves the subagent's transcript.
+newest() {
+  local m=0 t f
+  for f in "$1" "${1%.jsonl}"/subagents/*.jsonl; do
+    [ -f "$f" ] || continue
+    t=$(mtime "$f" 2>/dev/null) && [ "$t" -gt "$m" ] && m=$t
+  done
+  echo "$m"
+}
+
+# Claude has been waiting for your input past the grace period (see awake.sh wait). A transcript
 # changing after the wait began means you answered, so the wait is over.
 asleep_ok() {
   local since until path
   { read -r since until path < "$base.wait"; } 2>/dev/null || return 1
-  if [ -n "$path" ] && [ "$(mtime "$path" 2>/dev/null || echo 0)" -gt "$since" ] 2>/dev/null; then
+  if [ -n "$path" ] && [ "$(newest "$path")" -gt "$since" ] 2>/dev/null; then
     rm -f "$base.wait"; return 1
   fi
   [ "$(date +%s)" -ge "$until" ] 2>/dev/null

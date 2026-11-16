@@ -116,6 +116,12 @@ sleep 1; echo '{"type":"user"}' >> "$transcript"
 wait_for 10 held || fail "lock not held again after the permission prompt was answered"
 [ ! -f "$base.wait" ] || fail "wait marker left behind after the prompt was answered"
 pass "permission prompt answered: lock held again"
+sleep 1
+JAAGTE_RAHO_INPUT_WAIT=0 hook_event wait "$sid" "$tjson"
+wait_for 10 not_held || fail "lock still held after a subagent's permission prompt grace period ran out"
+sleep 1; mkdir -p "$work/transcript/subagents"; echo '{"type":"user"}' >> "$work/transcript/subagents/agent-x.jsonl"
+wait_for 10 held || fail "lock not held again after a subagent's permission prompt was answered"
+pass "subagent's permission prompt answered: lock held again"
 JAAGTE_RAHO_INPUT_WAIT=never hook_event wait "$sid" "$tjson"
 [ ! -f "$base.wait" ] || fail "JAAGTE_RAHO_INPUT_WAIT=never still set a grace period"
 hook_event stop "$sid" ',"background_tasks":[]'

@@ -99,17 +99,22 @@ function Test-Due {
   [bool]($jobs -and (Test-Path $jobs) -and ((Get-Content $jobs -Raw -ErrorAction SilentlyContinue) -match '"cron"'))
 }
 
-# Claude has been waiting for your input past the grace period (see awake.sh wait). The transcript
-# changing after the wait began means you answered, so the wait is over.
+# Claude has been waiting for your input past the grace period (see awake.sh wait). The transcript,
+# or a subagent's (<session>\subagents\*.jsonl), changing after the wait began means you answered.
 function Test-AsleepOk {
   $line = Get-Content "$base.wait" -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $line) { return $false }
   $since, $until, $path = ([string]$line).Trim() -split ' ', 3
   $s = 0L; $u = 0L
   if (-not ([long]::TryParse($since, [ref]$s) -and [long]::TryParse($until, [ref]$u))) { return $false }
-  if ($path -and (Test-Path -LiteralPath $path)) {
-    $m = ([DateTimeOffset](Get-Item -LiteralPath $path).LastWriteTimeUtc).ToUnixTimeSeconds()
-    if ($m -gt $s) { Remove-Item "$base.wait" -ErrorAction SilentlyContinue; return $false }
+  if ($path) {
+    $files = @(Get-Item -LiteralPath $path -ErrorAction SilentlyContinue) +
+      @(Get-ChildItem -LiteralPath (Join-Path ($path -replace '\.jsonl$', '') 'subagents') -Filter *.jsonl -ErrorAction SilentlyContinue)
+    foreach ($f in $files) {
+      if (([DateTimeOffset]$f.LastWriteTimeUtc).ToUnixTimeSeconds() -gt $s) {
+        Remove-Item "$base.wait" -ErrorAction SilentlyContinue; return $false
+      }
+    }
   }
   [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -ge $u
 }
