@@ -4,18 +4,34 @@
 # the grace period) or a scheduled run is due, and marks it
 # with <base>.held.
 # Exits, releasing the lock, when Claude exits or <base>.pid no longer names this watcher.
-base=$1 claude=$2 holder=
+base=$1 claude=$2 lidflag=$3 holder= holder_lid= lid_failed=
 echo $$ > "$base.pid"
 
+# hold [lid]: take the lock. With "lid" (Linux, /jaagte-raho:lid on), closing the lid doesn't sleep
+# the machine either. The inhibitor is tied to its process, so the OS lifts it when that ends.
 hold() {
   case "$(uname -s)" in
     Darwin) caffeinate -i -w "$claude" & ;;
     # setsid gives the holder its own process group, so release() also stops the child it runs.
-    *) setsid systemd-inhibit --what=idle:sleep --who="Claude Code" --why="Claude is working (jaagte-raho)" \
-         sleep infinity & ;;
+    *) setsid systemd-inhibit --what="idle:sleep${1:+:handle-lid-switch}" --who="Claude Code" \
+         --why="Claude is working (jaagte-raho)" sleep infinity & ;;
   esac
-  holder=$!
+  holder=$! holder_lid=$1
   : > "$base.held"
+}
+
+# Linux only: the lid override is switched on and the machine is plugged in (or has no battery).
+# Unplugging lifts it within seconds, so a laptop in a bag still sleeps when its lid is closed.
+lid_wanted() {
+  [ "$(uname -s)" = Linux ] && [ -n "$lidflag" ] && [ -f "$lidflag" ] && [ -z "$lid_failed" ] || return 1
+  local s bat=
+  for s in /sys/class/power_supply/*; do
+    case "$(cat "$s/type" 2>/dev/null)" in
+      Mains|USB*) [ "$(cat "$s/online" 2>/dev/null)" = 1 ] && return 0 ;;
+      Battery) bat=1 ;;
+    esac
+  done
+  [ -z "$bat" ]
 }
 
 release() {
@@ -60,10 +76,17 @@ asleep_ok() {
 trap 'release; exit 0' TERM INT
 while kill -0 "$claude" 2>/dev/null && [ "$(cat "$base.pid" 2>/dev/null)" = "$$" ]; do
   if { [ -f "$base.busy" ] && ! asleep_ok; } || due; then
-    { [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; } || hold
+    lid=; lid_wanted && lid=lid
+    if ! { [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; } || [ "$lid" != "$holder_lid" ]; then
+      release; hold $lid
+      # The lid inhibitor needs polkit's permission. If it's refused, the error is in <base>.log
+      # (shown by status); keep the idle lock and don't retry until the switch is turned off and on.
+      if [ -n "$lid" ]; then sleep 1; kill -0 "$holder" 2>/dev/null || { lid_failed=1; release; hold; }; fi
+    fi
   elif [ -n "$holder" ]; then
     release
   fi
+  [ -n "$lidflag" ] && [ ! -f "$lidflag" ] && lid_failed=
   sleep 2
 done
 release

@@ -32,7 +32,7 @@ for f in "$dir"/jaagte-raho-*.pid; do
   watcher=$(cat "$f")
   # A watcher that is gone holds nothing: drop its leftover files instead of listing them.
   if ! alive "$watcher"; then
-    rm -f "$base".pid "$base".busy "$base".wait "$base".held "$base".cwd "$base".task "$base".sched "$base".until
+    rm -f "$base".pid "$base".busy "$base".wait "$base".lid "$base".lid.err "$base".held "$base".cwd "$base".task "$base".sched "$base".until
     stale=$((stale + 1))
     continue
   fi
@@ -74,20 +74,34 @@ case "$(uname -s)" in
   Linux) systemd-inhibit --list 2>&1 | grep -i "claude code" || echo "No Claude Code inhibitor found" ;;
 esac
 
-# The keep-awake lock covers the idle timer only. Closing the lid follows the OS lid setting.
-echo "--- Closing the lid (jaagte-raho can't prevent this) ---"
+# The keep-awake lock covers the idle timer only. Closing the lid follows the OS lid setting, unless
+# the lid override (/jaagte-raho:lid on, Windows and Linux) is on.
+[ -f "$lidflag" ] && override=on || override=off
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
+    echo "--- Closing the lid (lid override: $override) ---"
     root="$(cd "$(dirname "$0")/.." && pwd)"
-    echo "Lid action: $(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$root/scripts/awake.ps1")" -Lid | tr -d '\r')"
-    echo "To keep Claude working with the lid closed: Control Panel > Power Options > Choose what closing the lid does > Do nothing" ;;
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$root/scripts/awake.ps1")" -Lid \
+      -LidFlag "$(cygpath -w "$lidflag")" | tr -d '\r' \
+      | sed '1s/^/Lid action: /'
+    [ "$override" = on ] \
+      || echo "To keep Claude working with the lid closed while plugged in: /jaagte-raho:lid on" ;;
   Darwin)
+    echo "--- Closing the lid (jaagte-raho can't prevent this on macOS yet) ---"
     if pmset -g | grep -Eq 'SleepDisabled[[:space:]]+1'; then
       echo "Sleep is disabled system-wide (pmset disablesleep 1), so closing the lid won't sleep this Mac"
     else
       echo "Closing the lid sleeps this Mac; macOS doesn't let apps prevent that. It stays awake only when on power with an external display (clamshell mode)"
     fi ;;
   Linux)
+    echo "--- Closing the lid (lid override: $override) ---"
     lid() { busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager "$1" 2>/dev/null | sed 's/^s "\(.*\)"$/\1/'; }
-    echo "Lid action (logind): on battery: $(lid HandleLidSwitch || echo unknown), plugged in: $(lid HandleLidSwitchExternalPower || echo unknown)" ;;
+    echo "Lid action (logind): on battery: $(lid HandleLidSwitch || echo unknown), plugged in: $(lid HandleLidSwitchExternalPower || echo unknown)"
+    if [ "$override" = on ]; then
+      systemd-inhibit --list 2>/dev/null | grep -i "claude code" | grep -q handle-lid-switch \
+        && echo "lid override: active, closing the lid won't sleep this machine while Claude works" \
+        || echo "lid override: on, takes effect while Claude is working and the machine is plugged in"
+    else
+      echo "To keep Claude working with the lid closed while plugged in: /jaagte-raho:lid on"
+    fi ;;
 esac

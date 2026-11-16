@@ -5,18 +5,80 @@
 #   has waited on your input past the grace period) or a scheduled run is due (marked by <base>.held); exit when that process exits or <base>.pid no longer names us. Windows drops the
 #   request when we exit.
 # -Lid: print what closing the lid does on the active power plan, plugged in and on battery.
-param([string]$Session, [int]$Watch = 0, [switch]$Lid)
+# -RestoreLid: put the lid setting back if the lid override changed it and no session needs it now.
+# -LidFlag <path>: the file /jaagte-raho:lid on creates; the watcher checks it on every loop.
+param([string]$Session, [int]$Watch = 0, [switch]$Lid, [switch]$RestoreLid, [string]$LidFlag)
+
+# --- Lid override (opt-in via /jaagte-raho:lid on) ---
+# While a session holds the lock, closing the lid does nothing. Only the plugged-in (AC) value of
+# the lid setting changes, so on battery closing the lid still sleeps the machine. The lid setting is
+# one value for the whole machine, shared by every session: the value found is saved once in
+# lid.orig ("<plan guid> <value>"), next to the switch file rather than in Temp, so disk cleanup
+# can't delete it while the setting is changed. Each session that needs the override marks
+# <base>.lid, and whoever lets go last puts the saved value back. A watcher that finds a saved value
+# with no live session behind it (after a crash or reboot) also puts it back, as does
+# /jaagte-raho:lid off. Changes happen under a mutex, so two sessions never save each other's value.
+$lidGuid = '5ca83367-6e45-459f-a27b-476b1d01c936'   # LIDACTION
+$lidNames = 'do nothing', 'sleep', 'hibernate', 'shut down'
+if (-not $LidFlag) { $LidFlag = Join-Path $HOME '.config\jaagte-raho\lid' }
+$orig = Join-Path (Split-Path $LidFlag) 'lid.orig'
+
+function Get-ActiveScheme {
+  [regex]::Match((powercfg /getactivescheme), '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}').Value
+}
+
+function Get-LidIndex($scheme, $acdc) {   # $acdc: AC or DC
+  (Get-CimInstance -Namespace root\cimv2\power -ClassName Win32_PowerSettingDataIndex -ErrorAction SilentlyContinue |
+    Where-Object InstanceID -like "*$scheme*\$acdc\*$lidGuid*").SettingIndexValue
+}
+
+function Set-LidAc($scheme, $value) {
+  powercfg /setacvalueindex $scheme SUB_BUTTONS LIDACTION $value | Out-Null
+  if ($LASTEXITCODE) { throw "powercfg /setacvalueindex failed with exit code $LASTEXITCODE" }
+  powercfg /setactive SCHEME_CURRENT | Out-Null
+}
+
+function Test-LidHolders {   # another live session has the override on
+  foreach ($f in Get-ChildItem $env:TEMP -Filter 'jaagte-raho-*.lid' -ErrorAction SilentlyContinue) {
+    if ($base -and $f.FullName -eq "$base.lid") { continue }
+    $p = Get-Content ($f.FullName -replace '\.lid$', '.pid') -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($p -and (Get-Process -Id $p -ErrorAction SilentlyContinue)) { return $true }
+    Remove-Item $f.FullName -ErrorAction SilentlyContinue   # left by a watcher that's gone
+  }
+  $false
+}
+
+function Invoke-LidLocked([scriptblock]$body) {
+  $mtx = New-Object Threading.Mutex($false, 'Local\jaagte-raho-lid')
+  try { [void]$mtx.WaitOne(10000) } catch [Threading.AbandonedMutexException] { }   # owner died; it's ours now
+  try { & $body } finally { $mtx.ReleaseMutex(); $mtx.Dispose() }
+}
+
+function Restore-LidIfUnused {   # call under the mutex
+  if (-not (Test-Path $orig) -or (Test-LidHolders)) { return }
+  $scheme, $value = ([string](Get-Content $orig | Select-Object -First 1)).Trim() -split ' '
+  if ($scheme -match '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$' -and $value -match '^[0-3]$') {
+    Set-LidAc $scheme $value
+  }
+  Remove-Item $orig -ErrorAction SilentlyContinue
+}
 
 if ($Lid) {
-  $plan = [regex]::Match((powercfg /getactivescheme), '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}').Value
+  $plan = Get-ActiveScheme
   if (-not $plan) { 'unknown'; exit 0 }
-  $names = 'do nothing', 'sleep', 'hibernate', 'shut down'
-  $idx = Get-CimInstance -Namespace root\cimv2\power -ClassName Win32_PowerSettingDataIndex -ErrorAction SilentlyContinue |
-    Where-Object InstanceID -like "*$plan*5ca83367-6e45-459f-a27b-476b1d01c936*"   # LIDACTION
-  $ac = ($idx | Where-Object InstanceID -like '*\AC\*').SettingIndexValue
-  $dc = ($idx | Where-Object InstanceID -like '*\DC\*').SettingIndexValue
+  $ac = Get-LidIndex $plan AC
+  $dc = Get-LidIndex $plan DC
   if ($null -eq $ac -or $null -eq $dc) { 'unknown'; exit 0 }
-  "plugged in: $($names[$ac]), on battery: $($names[$dc])"
+  "plugged in: $($lidNames[$ac]), on battery: $($lidNames[$dc])"
+  if (Test-Path $orig) {
+    $value = ([string](Get-Content $orig | Select-Object -First 1)).Trim() -split ' ' | Select-Object -Last 1
+    if ($value -match '^[0-3]$') { "lid override: on, puts plugged in back to '$($lidNames[$value])' once Claude is done" }
+  }
+  exit 0
+}
+
+if ($RestoreLid) {
+  try { Invoke-LidLocked { Restore-LidIfUnused }; 'ok' } catch { "error: $($_.Exception.Message)" }
   exit 0
 }
 
@@ -33,8 +95,9 @@ if (-not $Watch) {
   if ($old -and (Get-Process -Id $old -ErrorAction SilentlyContinue)) { 'ok'; exit 0 }
   Remove-Item "$base.pid", "$base.err" -ErrorAction SilentlyContinue
 
-  Start-Process powershell.exe -WindowStyle Hidden -ArgumentList `
-    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Session', $Session, '-Watch', $p.ProcessId
+  $argv = '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Session', $Session, '-Watch', $p.ProcessId
+  if ($LidFlag) { $argv += '-LidFlag', "`"$LidFlag`"" }
+  Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $argv
 
   # The watcher writes .pid once it has taken and released the request, or .err if it couldn't.
   for ($i = 0; $i -lt 100; $i++) {
@@ -119,6 +182,37 @@ function Test-AsleepOk {
   [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -ge $u
 }
 
+# Turn this session's lid override on or off, saving or restoring the machine's value as needed.
+# A failure is written to <base>.lid.err (shown by status) and not retried until the switch changes.
+$lidFailed = $false
+function Update-Lid([bool]$want) {
+  if (-not $want) { $script:lidFailed = $false }
+  $mine = Test-Path "$base.lid"
+  if ($want -and ($mine -or $lidFailed)) { return }
+  if (-not $want -and -not $mine -and -not (Test-Path $orig)) { return }
+  try {
+    Invoke-LidLocked {
+      if ($want) {
+        if (-not (Test-Path $orig)) {
+          $scheme = Get-ActiveScheme
+          $value = if ($scheme) { Get-LidIndex $scheme AC }
+          if ($null -eq $value) { throw 'could not read the lid setting of the active power plan' }
+          Set-Content $orig "$scheme $value"
+          if ($value -ne 0) { Set-LidAc $scheme 0 }
+        }
+        Set-Content "$base.lid" ''
+      } else {
+        Remove-Item "$base.lid" -ErrorAction SilentlyContinue
+        Restore-LidIfUnused
+      }
+    }
+    Remove-Item "$base.lid.err" -ErrorAction SilentlyContinue
+  } catch {
+    Set-Content "$base.lid.err" "lid override: $($_.Exception.Message)"
+    if ($want) { $script:lidFailed = $true }
+  }
+}
+
 Set-Content "$base.pid" $PID
 $held = $false
 while ((Get-Process -Id $Watch -ErrorAction SilentlyContinue) -and ((Get-Content "$base.pid" -ErrorAction SilentlyContinue) -eq "$PID")) {
@@ -132,6 +226,8 @@ while ((Get-Process -Id $Watch -ErrorAction SilentlyContinue) -and ((Get-Content
     Remove-Item "$base.held" -ErrorAction SilentlyContinue
     $held = $false
   }
+  Update-Lid ($held -and $LidFlag -and (Test-Path -LiteralPath $LidFlag))
   Start-Sleep -Seconds 2
 }
 Remove-Item "$base.held" -ErrorAction SilentlyContinue
+Update-Lid $false
