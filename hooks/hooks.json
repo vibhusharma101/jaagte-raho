@@ -12,6 +12,9 @@
     "Notification": [
       { "matcher": "idle_prompt", "hooks": [{ "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/awake.sh\" idle", "timeout": 10 }] }
     ],
+    "PostToolUse": [
+      { "matcher": "CronCreate|CronDelete|ScheduleWakeup", "hooks": [{ "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/awake.sh\" sched", "timeout": 10 }] }
+    ],
     "SessionEnd": [
       { "hooks": [{ "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/awake.sh\" end", "timeout": 10 }] }
     ]

@@ -27,6 +27,7 @@ Start a new session and you're done.
 | You sent a prompt, Claude is working                   | **kept awake**    |
 | Claude finished, background agents/tasks still running | **kept awake**    |
 | Claude finished, nothing in the background             | sleeps normally (within ~2 s) |
+| Claude finished, a scheduled run is due (`/loop`, cron job) | **kept awake** until the run, so it isn't skipped |
 | You interrupted a turn (Esc)                           | sleeps normally (within ~60 s) |
 | Claude exited or crashed                               | sleeps normally   |
 
@@ -78,10 +79,21 @@ On `SessionStart`, a hook finds the Claude Code process and starts a small backg
 |-----------------------------------|---------------------------------------------------------------|
 | `UserPromptSubmit`                | mark busy                                                     |
 | `Stop`                            | clear busy, unless its `background_tasks` list is non-empty   |
+| `PostToolUse` (`CronCreate`, `CronDelete`, `ScheduleWakeup`) | note when the next scheduled run is due, or that it was cancelled |
 | `Notification` (`idle_prompt`)    | clear busy. Claude Code sends it ~60 s after a turn ends, only once no background agent is running, so it also covers interrupted turns |
 | `SessionEnd`                      | stop the watcher                                              |
 
-The hooks only create or delete a flag file, so prompts are never slowed down. What holds the machine awake while busy:
+The hooks only create or delete a flag file, so prompts are never slowed down.
+
+**Scheduled runs:** a sleeping computer doesn't run anything, so a `/loop` wakeup or a cron job that falls due while it sleeps is silently skipped. jaagte-raho keeps the computer awake while one is due:
+
+- a `/loop` wakeup or one-shot job: until 15 minutes past its due time, so the run can start
+- a recurring job: until you delete it, or it expires after 7 days
+- durable jobs in the project's `.claude/scheduled_tasks.json`: while the file lists any and the session is open
+
+`/jaagte-raho:status` shows when a session is being kept awake for a scheduled run. Like everything else, it ends when Claude exits.
+
+What holds the machine awake:
 
 | OS      | Lock                                                   |
 |---------|--------------------------------------------------------|
@@ -101,9 +113,13 @@ When Claude exits, normally or by crashing, the watcher exits and the OS release
 
 ## What it can't do
 
-- **Closing the lid** follows your OS lid setting, not the idle timer. On Windows, set *Control Panel → Power Options → Choose what closing the lid does → Do nothing*. On macOS, the lid sleeps the Mac unless it's on power with an external display.
+- **Closing the lid.** jaagte-raho stops *idle* sleep only, and so does `caffeinate -i`. Closing the lid follows your OS lid setting, which apps aren't allowed to override. `/jaagte-raho:status` shows what closing the lid does on your machine.
+  - Windows: set *Control Panel → Power Options → Choose what closing the lid does → Do nothing*.
+  - macOS: the lid sleeps the Mac unless it's on power with an external display (clamshell mode).
+  - Linux: logind's `HandleLidSwitch` setting decides.
+- **tmux won't help either.** tmux keeps programs running when the terminal or SSH connection goes away, not when the computer sleeps. A tmux on a remote server survives your laptop lid only because the server never sleeps.
 - **Cloud sessions** (claude.ai/code) run on Anthropic's servers and don't need your machine awake at all. This is for local sessions: terminal, IDE, Remote Control.
-- **Battery.** It keeps the machine awake on battery until Claude finishes.
+- **Battery.** It keeps the machine awake on battery until Claude finishes, and while a scheduled run is due. An hourly cron job means staying awake until you delete it.
 
 ## Troubleshooting
 
