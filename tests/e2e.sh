@@ -98,6 +98,30 @@ hook_event idle "$sid"
 wait_for 10 not_held || fail "lock still held after idle_prompt"
 pass "idle_prompt (covers interrupted turns): lock released"
 
+# Waiting for your input (permission prompt): held during the grace period, released after it,
+# held again once you answer (the transcript changes).
+transcript="$work/transcript.jsonl"; : > "$transcript"
+tjson=",\"notification_type\":\"permission_prompt\",\"transcript_path\":\"$(native "$transcript" | sed 's/\\/\\\\/g')\""
+hook_event busy "$sid"
+wait_for 10 held || fail "lock not held after the prompt before the permission prompt"
+hook_event wait "$sid" "$tjson"
+sleep 4; held || fail "lock released during the grace period of a permission prompt"
+pass "permission prompt within the grace period: lock still held"
+sleep 1
+JAAGTE_RAHO_INPUT_WAIT=0 hook_event wait "$sid" "$tjson"
+wait_for 10 not_held || fail "lock still held after the permission prompt's grace period ran out"
+bash "$root/scripts/status.sh" | grep -q "waiting for your input" || fail "status does not show the session waiting for input"
+pass "permission prompt past the grace period: lock released, status says it's waiting"
+sleep 1; echo '{"type":"user"}' >> "$transcript"
+wait_for 10 held || fail "lock not held again after the permission prompt was answered"
+[ ! -f "$base.wait" ] || fail "wait marker left behind after the prompt was answered"
+pass "permission prompt answered: lock held again"
+JAAGTE_RAHO_INPUT_WAIT=never hook_event wait "$sid" "$tjson"
+[ ! -f "$base.wait" ] || fail "JAAGTE_RAHO_INPUT_WAIT=never still set a grace period"
+hook_event stop "$sid" ',"background_tasks":[]'
+wait_for 10 not_held || fail "lock still held after the turn finished"
+pass "JAAGTE_RAHO_INPUT_WAIT=never: stays awake while waiting"
+
 hook_event busy "$sid"
 wait_for 10 held || fail "lock not held after the third prompt"
 if [ -n "$win" ]; then taskkill //PID "$claude" //F >/dev/null; else kill "$claude"; fi

@@ -28,6 +28,7 @@ Start a new session and you're done.
 | Claude finished, background agents/tasks still running | **kept awake**    |
 | Claude finished, nothing in the background             | sleeps normally (within ~2 s) |
 | Claude finished, a scheduled run is due (`/loop`, cron job) | **kept awake** until the run, so it isn't skipped |
+| Claude is waiting for your answer (permission prompt, question) | **kept awake** for 10 minutes, then sleeps normally |
 | You interrupted a turn (Esc)                           | sleeps normally (within ~60 s) |
 | Claude exited or crashed                               | sleeps normally   |
 
@@ -81,6 +82,7 @@ On `SessionStart`, a hook finds the Claude Code process and starts a small backg
 | `Stop`                            | clear busy, unless its `background_tasks` list is non-empty   |
 | `PostToolUse` (`CronCreate`, `CronDelete`, `ScheduleWakeup`) | note when the next scheduled run is due, or that it was cancelled |
 | `Notification` (`idle_prompt`)    | clear busy. Claude Code sends it ~60 s after a turn ends, only once no background agent is running, so it also covers interrupted turns |
+| `Notification` (`permission_prompt`, `elicitation_dialog`) | note that Claude is waiting for you; the lock is released once the grace period runs out |
 | `SessionEnd`                      | stop the watcher                                              |
 
 The hooks only create or delete a flag file, so prompts are never slowed down.
@@ -103,12 +105,13 @@ What holds the machine awake:
 
 When Claude exits, normally or by crashing, the watcher exits and the OS releases the lock.
 
-**Waiting for permission:** while Claude is waiting for you to approve a tool, the turn isn't over, so the computer stays awake. That's deliberate: if you approve from your phone via Remote Control, a sleeping laptop couldn't continue.
+**Waiting for your input:** when Claude stops to ask you something (a permission prompt or a question), nothing moves until you answer. jaagte-raho keeps the computer awake for 10 minutes in case you're nearby, then lets it sleep so a forgotten prompt doesn't drain the battery for hours. Once you answer, it's kept awake again. A scheduled run that's due still keeps it awake. If you approve prompts from your phone via Remote Control, set `JAAGTE_RAHO_INPUT_WAIT=never`, since a sleeping laptop can't receive your answer. `/jaagte-raho:status` shows when a session is waiting and when it may sleep.
 
 ## Options
 
 | Env var                 | Effect                                                                 |
 |-------------------------|------------------------------------------------------------------------|
+| `JAAGTE_RAHO_INPUT_WAIT=<minutes>` | How long to stay awake while Claude waits for your input before letting the computer sleep. Default `10`. `never` keeps it awake until you answer (use this with Remote Control). |
 | `JAAGTE_RAHO_DISPLAY=0` | Windows: allow the screen to turn off. Saves battery, but on Modern Standby laptops (`powercfg /a` shows "S0 Low Power Idle") the screen turning off can put the machine into standby. |
 
 ## What it can't do
@@ -146,7 +149,7 @@ When Claude exits, normally or by crashing, the watcher exits and the OS release
 
 ## Development
 
-`tests/e2e.sh` runs a stand-in Claude process and walks a session through its whole life: idle (not held), prompt (held, and the OS reports it), turn ending with background tasks (still held), turn ending with none (released), `idle_prompt` (released), Claude exiting mid-turn and `SessionEnd` (watcher gone, lock released). CI runs it on Windows, macOS and Linux on every push.
+`tests/e2e.sh` runs a stand-in Claude process and walks a session through its whole life: idle (not held), prompt (held, and the OS reports it), turn ending with background tasks (still held), turn ending with none (released), `idle_prompt` (released), a permission prompt (held for the grace period, released after it, held again once answered), Claude exiting mid-turn and `SessionEnd` (watcher gone, lock released). CI runs it on Windows, macOS and Linux on every push.
 
 Before each release, also do the one thing CI can't — a real sleep test on each OS:
 

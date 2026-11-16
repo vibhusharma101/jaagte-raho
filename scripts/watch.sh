@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Session watcher for macOS/Linux: watch.sh <base> <claude pid>.
-# Holds the OS keep-awake lock while <base>.busy exists or a scheduled run is due, and marks it
+# Holds the OS keep-awake lock while <base>.busy exists (unless Claude has waited on your input past
+# the grace period) or a scheduled run is due, and marks it
 # with <base>.held.
 # Exits, releasing the lock, when Claude exits or <base>.pid no longer names this watcher.
 base=$1 claude=$2 holder=
@@ -32,9 +33,22 @@ due() {
   [ -n "$cwd" ] && grep -q '"cron"' "$cwd/.claude/scheduled_tasks.json" 2>/dev/null
 }
 
+mtime() { if [ "$(uname -s)" = Darwin ]; then stat -f %m "$1"; else stat -c %Y "$1"; fi; }
+
+# Claude has been waiting for your input past the grace period (see awake.sh wait). The transcript
+# changing after the wait began means you answered, so the wait is over.
+asleep_ok() {
+  local since until path
+  { read -r since until path < "$base.wait"; } 2>/dev/null || return 1
+  if [ -n "$path" ] && [ "$(mtime "$path" 2>/dev/null || echo 0)" -gt "$since" ] 2>/dev/null; then
+    rm -f "$base.wait"; return 1
+  fi
+  [ "$(date +%s)" -ge "$until" ] 2>/dev/null
+}
+
 trap 'release; exit 0' TERM INT
 while kill -0 "$claude" 2>/dev/null && [ "$(cat "$base.pid" 2>/dev/null)" = "$$" ]; do
-  if [ -f "$base.busy" ] || due; then
+  if { [ -f "$base.busy" ] && ! asleep_ok; } || due; then
     { [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; } || hold
   elif [ -n "$holder" ]; then
     release
