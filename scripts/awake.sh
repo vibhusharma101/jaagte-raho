@@ -4,6 +4,7 @@
 #   busy   UserPromptSubmit  Claude is working: keep the computer awake
 #   stop   Stop              turn finished: let it sleep, unless background tasks are still running
 #   idle   Notification      idle_prompt: nothing has happened for ~60s (also covers interrupted turns)
+#   wait   Notification      permission_prompt / elicitation_dialog: Claude is waiting for your input
 #   sched  PostToolUse       a run was scheduled or cancelled (CronCreate, CronDelete, ScheduleWakeup)
 #   end    SessionEnd        stop this session's watcher
 # The watcher holds the OS lock only while <base>.busy exists or a scheduled run is due (see sched),
@@ -37,6 +38,7 @@ base="$dir/jaagte-raho-$sid"
 case "$1" in
   busy)
     : > "$base.busy"
+    rm -f "$base.wait"
     # The start of the prompt, so /jaagte-raho:status can say what each session is doing.
     # Escaped backslashes and quotes are swapped for control characters while the string is cut out.
     printf '%s' "$input" | sed 's/\\\\/\x02/g; s/\\"/\x01/g' \
@@ -47,6 +49,20 @@ case "$1" in
     # A non-empty background_tasks list means agents or commands are still running.
     printf '%s' "$input" | grep -Eq '"background_tasks"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]' \
       || rm -f "$base.busy"
+    rm -f "$base.wait"
+    exit 0 ;;
+  wait)
+    # Claude is waiting for you (a permission prompt or a question). Nothing moves until you answer,
+    # so let the computer sleep once the grace period runs out: <base>.wait holds
+    # "<since epoch s> <sleep-allowed epoch s> <transcript path>". The watcher drops it once the
+    # transcript changes after <since>, i.e. you answered. JAAGTE_RAHO_INPUT_WAIT is the grace period
+    # in minutes (default 10); anything that isn't a number (e.g. "never") keeps it awake while waiting.
+    mins=${JAAGTE_RAHO_INPUT_WAIT:-10}
+    case "$mins" in ''|*[!0-9]*) exit 0 ;; esac
+    [ -f "$base.busy" ] || exit 0
+    now=$(date +%s)
+    path=$(printf '%s' "$input" | sed -n 's/.*"transcript_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 | sed 's/\\\\/\\/g')
+    echo "$now $(( now + mins * 60 )) $path" > "$base.wait.tmp" && mv -f "$base.wait.tmp" "$base.wait"
     exit 0 ;;
   sched)
     # PostToolUse for CronCreate / CronDelete / ScheduleWakeup. A sleeping computer skips scheduled
@@ -81,8 +97,8 @@ case "$1" in
       rm -f "$base.sched" "$base.until"
     fi
     exit 0 ;;
-  idle) rm -f "$base.busy"; exit 0 ;;
-  end) rm -f "$base.busy" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until"; exit 0 ;;
+  idle) rm -f "$base.busy" "$base.wait"; exit 0 ;;
+  end) rm -f "$base.busy" "$base.wait" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until"; exit 0 ;;
   start) ;;
   *) exit 0 ;;
 esac

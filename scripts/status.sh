@@ -32,17 +32,26 @@ for f in "$dir"/jaagte-raho-*.pid; do
   watcher=$(cat "$f")
   # A watcher that is gone holds nothing: drop its leftover files instead of listing them.
   if ! alive "$watcher"; then
-    rm -f "$base".pid "$base".busy "$base".held "$base".cwd "$base".task "$base".sched "$base".until
+    rm -f "$base".pid "$base".busy "$base".wait "$base".held "$base".cwd "$base".task "$base".sched "$base".until
     stale=$((stale + 1))
     continue
   fi
   found=1
   folder=$(cat "$base.cwd" 2>/dev/null); folder=${folder%/}
   [ -f "$base.busy" ] && busy=working || busy=idle
+  wait= since= until=
+  [ "$busy" = working ] && { read -r since until wait < "$base.wait"; } 2>/dev/null && busy="waiting for your input"
   [ -f "$base.held" ] && state="AWAKE (lock held)" || state="may sleep (lock not held)"
   echo "Session ${sid:0:8}${folder:+ (${folder##*/})}: Claude $busy | watcher PID $watcher | $state"
   [ -n "$folder" ] && echo "  folder: $folder"
   [ -s "$base.task" ] && echo "  last prompt ($(ago "$base.task")): \"$(cat "$base.task")\""
+  if [ "$busy" = "waiting for your input" ] && [ "$until" -gt 0 ] 2>/dev/null; then
+    if [ "$until" -gt "$(date +%s)" ]; then
+      echo "  waiting for your input since $(clock "$since"): lets the computer sleep at $(clock "$until") if you haven't answered"
+    else
+      echo "  waiting for your input since $(clock "$since"): computer allowed to sleep since $(clock "$until")"
+    fi
+  fi
   until=$(cat "$base.until" 2>/dev/null)
   [ "$until" -gt "$(date +%s)" ] 2>/dev/null \
     && echo "  scheduled run due: kept awake until $(clock "$until") so it doesn't get skipped"

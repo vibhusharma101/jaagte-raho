@@ -1,8 +1,8 @@
 # Session watcher for Windows.
 # -Session <id>: find the Claude process that ran this hook, start a hidden watcher for it, and print
 #   "ok" or "error: <reason>" once the watcher has (or hasn't) proven it can take the power request.
-# -Session <id> -Watch <pid>: be the watcher. Hold the request while <base>.busy exists or a scheduled
-#   run is due (marked by <base>.held); exit when that process exits or <base>.pid no longer names us. Windows drops the
+# -Session <id> -Watch <pid>: be the watcher. Hold the request while <base>.busy exists (unless Claude
+#   has waited on your input past the grace period) or a scheduled run is due (marked by <base>.held); exit when that process exits or <base>.pid no longer names us. Windows drops the
 #   request when we exit.
 # -Lid: print what closing the lid does on the active power plan, plugged in and on battery.
 param([string]$Session, [int]$Watch = 0, [switch]$Lid)
@@ -99,10 +99,30 @@ function Test-Due {
   [bool]($jobs -and (Test-Path $jobs) -and ((Get-Content $jobs -Raw -ErrorAction SilentlyContinue) -match '"cron"'))
 }
 
+# Claude has been waiting for your input past the grace period (see awake.sh wait). The transcript,
+# or a subagent's (<session>\subagents\*.jsonl), changing after the wait began means you answered.
+function Test-AsleepOk {
+  $line = Get-Content "$base.wait" -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $line) { return $false }
+  $since, $until, $path = ([string]$line).Trim() -split ' ', 3
+  $s = 0L; $u = 0L
+  if (-not ([long]::TryParse($since, [ref]$s) -and [long]::TryParse($until, [ref]$u))) { return $false }
+  if ($path) {
+    $files = @(Get-Item -LiteralPath $path -ErrorAction SilentlyContinue) +
+      @(Get-ChildItem -LiteralPath (Join-Path ($path -replace '\.jsonl$', '') 'subagents') -Filter *.jsonl -ErrorAction SilentlyContinue)
+    foreach ($f in $files) {
+      if (([DateTimeOffset]$f.LastWriteTimeUtc).ToUnixTimeSeconds() -gt $s) {
+        Remove-Item "$base.wait" -ErrorAction SilentlyContinue; return $false
+      }
+    }
+  }
+  [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -ge $u
+}
+
 Set-Content "$base.pid" $PID
 $held = $false
 while ((Get-Process -Id $Watch -ErrorAction SilentlyContinue) -and ((Get-Content "$base.pid" -ErrorAction SilentlyContinue) -eq "$PID")) {
-  $busy = (Test-Path "$base.busy") -or (Test-Due)
+  $busy = ((Test-Path "$base.busy") -and -not (Test-AsleepOk)) -or (Test-Due)
   if ($busy -and -not $held) {
     foreach ($t in $types) { [void][Power]::PowerSetRequest($req, $t) }
     Set-Content "$base.held" ''
