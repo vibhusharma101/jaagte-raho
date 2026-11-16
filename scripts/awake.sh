@@ -4,8 +4,10 @@
 #   busy   UserPromptSubmit  Claude is working: keep the computer awake
 #   stop   Stop              turn finished: let it sleep, unless background tasks are still running
 #   idle   Notification      idle_prompt: nothing has happened for ~60s (also covers interrupted turns)
+#   sched  PostToolUse       a run was scheduled or cancelled (CronCreate, CronDelete, ScheduleWakeup)
 #   end    SessionEnd        stop this session's watcher
-# The watcher holds the OS lock only while <base>.busy exists, and exits when Claude exits or
+# The watcher holds the OS lock only while <base>.busy exists or a scheduled run is due (see sched),
+# and exits when Claude exits or
 # <base>.pid is removed. Always exits 0, so it can never block Claude.
 
 root="${CLAUDE_PLUGIN_ROOT:-$(dirname "$0")/..}"
@@ -46,8 +48,41 @@ case "$1" in
     printf '%s' "$input" | grep -Eq '"background_tasks"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]' \
       || rm -f "$base.busy"
     exit 0 ;;
+  sched)
+    # PostToolUse for CronCreate / CronDelete / ScheduleWakeup. A sleeping computer skips scheduled
+    # runs, so remember until when one is due: <base>.sched holds "<job> <until epoch s>" lines, and
+    # <base>.until the latest of them, which the watcher keeps the computer awake until.
+    now=$(date +%s)
+    resp=$(printf '%s' "$input" | sed 's/.*"tool_response"[[:space:]]*:[[:space:]]*//')
+    field() { printf '%s' "$resp" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([A-Za-z0-9_-]*\).*/\1/p" | head -n1; }
+    tool=$(printf '%s' "$input" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    grace=900   # keep awake this long past the due time, so the run can start and get going
+    key= until=
+    case "$tool" in
+      ScheduleWakeup)   # a /loop wakeup; each new one replaces the last
+        key=wakeup
+        [ "$(field stopped)" = true ] || { ms=$(field scheduledFor); [ -n "$ms" ] && until=$(( ms / 1000 + grace )); } ;;
+      CronCreate)
+        key=$(field id)
+        if [ "$(field recurring)" = true ]; then until=$(( now + 7 * 86400 ))   # recurring jobs expire after 7 days
+        else ms=$(field nextFireAt); [ -n "$ms" ] && until=$(( ms / 1000 + grace )); fi ;;
+      CronDelete)
+        key=$(field id)
+        [ "$(field endedLoopWakeup)" = true ] && { grep -v '^wakeup ' "$base.sched" > "$base.sched.tmp"; mv -f "$base.sched.tmp" "$base.sched"; } 2>/dev/null ;;
+    esac
+    key=${key//[^A-Za-z0-9_-]/}
+    [ -n "$key" ] || exit 0
+    { grep -v "^$key " "$base.sched" 2>/dev/null; [ -n "$until" ] && echo "$key $until"; } \
+      | awk -v now="$now" '$2 > now' > "$base.sched.tmp"
+    mv -f "$base.sched.tmp" "$base.sched"
+    if [ -s "$base.sched" ]; then
+      awk '$2 > m { m = $2 } END { print m }' "$base.sched" > "$base.until.tmp" && mv -f "$base.until.tmp" "$base.until"
+    else
+      rm -f "$base.sched" "$base.until"
+    fi
+    exit 0 ;;
   idle) rm -f "$base.busy"; exit 0 ;;
-  end) rm -f "$base.busy" "$base.pid" "$base.cwd" "$base.task"; exit 0 ;;
+  end) rm -f "$base.busy" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until"; exit 0 ;;
   start) ;;
   *) exit 0 ;;
 esac

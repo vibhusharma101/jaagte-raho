@@ -1,10 +1,24 @@
 # Session watcher for Windows.
 # -Session <id>: find the Claude process that ran this hook, start a hidden watcher for it, and print
 #   "ok" or "error: <reason>" once the watcher has (or hasn't) proven it can take the power request.
-# -Session <id> -Watch <pid>: be the watcher. Hold the request while <base>.busy exists (marked by
-#   <base>.held); exit when that process exits or <base>.pid no longer names us. Windows drops the
+# -Session <id> -Watch <pid>: be the watcher. Hold the request while <base>.busy exists or a scheduled
+#   run is due (marked by <base>.held); exit when that process exits or <base>.pid no longer names us. Windows drops the
 #   request when we exit.
-param([string]$Session, [int]$Watch = 0)
+# -Lid: print what closing the lid does on the active power plan, plugged in and on battery.
+param([string]$Session, [int]$Watch = 0, [switch]$Lid)
+
+if ($Lid) {
+  $plan = [regex]::Match((powercfg /getactivescheme), '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}').Value
+  if (-not $plan) { 'unknown'; exit 0 }
+  $names = 'do nothing', 'sleep', 'hibernate', 'shut down'
+  $idx = Get-CimInstance -Namespace root\cimv2\power -ClassName Win32_PowerSettingDataIndex -ErrorAction SilentlyContinue |
+    Where-Object InstanceID -like "*$plan*5ca83367-6e45-459f-a27b-476b1d01c936*"   # LIDACTION
+  $ac = ($idx | Where-Object InstanceID -like '*\AC\*').SettingIndexValue
+  $dc = ($idx | Where-Object InstanceID -like '*\DC\*').SettingIndexValue
+  if ($null -eq $ac -or $null -eq $dc) { 'unknown'; exit 0 }
+  "plugged in: $($names[$ac]), on battery: $($names[$dc])"
+  exit 0
+}
 
 $base = Join-Path $env:TEMP "jaagte-raho-$Session"
 
@@ -74,10 +88,21 @@ public static class Power {
   exit 1
 }
 
+# A scheduled run is due: <base>.until (written by the sched hook) is still ahead, or the project has
+# durable jobs in .claude/scheduled_tasks.json, which only run while a session is open.
+$cwd = Get-Content "$base.cwd" -ErrorAction SilentlyContinue | Select-Object -First 1
+$jobs = if ($cwd) { Join-Path $cwd '.claude\scheduled_tasks.json' }
+function Test-Due {
+  $until = 0L
+  [void][long]::TryParse([string](Get-Content "$base.until" -ErrorAction SilentlyContinue | Select-Object -First 1), [ref]$until)
+  if ($until -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { return $true }
+  [bool]($jobs -and (Test-Path $jobs) -and ((Get-Content $jobs -Raw -ErrorAction SilentlyContinue) -match '"cron"'))
+}
+
 Set-Content "$base.pid" $PID
 $held = $false
 while ((Get-Process -Id $Watch -ErrorAction SilentlyContinue) -and ((Get-Content "$base.pid" -ErrorAction SilentlyContinue) -eq "$PID")) {
-  $busy = Test-Path "$base.busy"
+  $busy = (Test-Path "$base.busy") -or (Test-Due)
   if ($busy -and -not $held) {
     foreach ($t in $types) { [void][Power]::PowerSetRequest($req, $t) }
     Set-Content "$base.held" ''

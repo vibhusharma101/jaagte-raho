@@ -49,11 +49,11 @@ hook_event() {  # hook_event <event> <session id> [extra JSON fields]
 start_claude() {
   rm -f "$work/out" "$work/pid"
   CLAUDE_PLUGIN_ROOT="$(native "$root")" BASH_BIN="$(native "$BASH")" HOOK="$(native "$hook")" \
-  OUT="$(native "$work/out")" PIDFILE="$(native "$work/pid")" SID="$1" \
+  OUT="$(native "$work/out")" PIDFILE="$(native "$work/pid")" SID="$1" CWD="$(native "$work")" \
   node -e '
     const fs = require("fs"), { execFileSync } = require("child_process");
     fs.writeFileSync(process.env.PIDFILE, String(process.pid));
-    const input = JSON.stringify({ session_id: process.env.SID, hook_event_name: "SessionStart", source: "startup" });
+    const input = JSON.stringify({ session_id: process.env.SID, hook_event_name: "SessionStart", source: "startup", cwd: process.env.CWD });
     fs.writeFileSync(process.env.OUT, execFileSync(process.env.BASH_BIN, [process.env.HOOK, "start"], { input }));
     setInterval(() => {}, 1000);
   ' &
@@ -109,12 +109,49 @@ if [ -n "${CI:-}" ]; then
 fi
 pass "Claude exited mid-turn: lock released, watcher gone"
 
-# --- Session 2: SessionEnd (e.g. /clear) stops the watcher while Claude keeps running
+# --- Session 2: scheduled runs keep the computer awake while Claude is idle, until they're cancelled
+sid="e2e-$$-c"
+start_claude "$sid"
+sleep 3; not_held || fail "session 2: lock held while idle with nothing scheduled"
+sched() {  # sched <tool> <tool_response JSON>
+  hook_event sched "$sid" ",\"tool_name\":\"$1\",\"tool_input\":{\"prompt\":\"say \\\"id\\\": 1\"},\"tool_response\":$2,\"tool_use_id\":\"t\""
+}
+
+sched ScheduleWakeup "{\"scheduledFor\":$(( ($(date +%s) + 300) * 1000 )),\"clampedDelaySeconds\":300,\"wasClamped\":false}"
+wait_for 10 held || fail "lock not held while a /loop wakeup is due"
+bash "$root/scripts/status.sh" | grep -q "scheduled run due" || fail "status does not show the due wakeup"
+sched ScheduleWakeup '{"scheduledFor":0,"clampedDelaySeconds":0,"wasClamped":false,"stopped":true}'
+wait_for 10 not_held || fail "lock still held after the loop was stopped"
+pass "/loop wakeup due: lock held until the loop stopped"
+
+sched CronCreate '{"id":"job1","humanSchedule":"every hour","recurring":true,"durable":false,"nextFireAt":1}'
+sched CronCreate "{\"id\":\"job2\",\"humanSchedule\":\"once\",\"recurring\":false,\"nextFireAt\":$(( ($(date +%s) + 120) * 1000 ))}"
+wait_for 10 held || fail "lock not held while cron jobs are scheduled"
+sched CronDelete '{"id":"job1"}'
+sleep 4; held || fail "lock released while a one-shot job was still due"
+sched CronDelete '{"id":"job2"}'
+wait_for 10 not_held || fail "lock still held after every cron job was deleted"
+pass "cron jobs scheduled: lock held until they were deleted"
+
+sched CronCreate "{\"id\":\"old\",\"recurring\":false,\"nextFireAt\":$(( ($(date +%s) - 3600) * 1000 ))}"
+sleep 4; not_held || fail "lock held for a one-shot job that was due an hour ago"
+pass "one-shot job long past its due time: not held"
+
+mkdir -p "$work/.claude"
+echo '[{"id":"d1","cron":"0 * * * *","prompt":"x","recurring":true}]' > "$work/.claude/scheduled_tasks.json"
+wait_for 10 held || fail "lock not held while the project has durable scheduled jobs"
+rm -f "$work/.claude/scheduled_tasks.json"
+wait_for 10 not_held || fail "lock still held after the durable jobs were removed"
+pass "durable jobs in .claude/scheduled_tasks.json: lock held while they exist"
+hook_event end "$sid"
+if [ -n "$win" ]; then taskkill //PID "$claude" //F >/dev/null; else kill "$claude"; fi
+
+# --- Session 3: SessionEnd (e.g. /clear) stops the watcher while Claude keeps running
 sid="e2e-$$-b"
 start_claude "$sid"
 watcher=$(cat "$base.pid")
 hook_event busy "$sid"
-wait_for 10 held || fail "session 2: lock not held after a prompt"
+wait_for 10 held || fail "session 3: lock not held after a prompt"
 hook_event end "$sid"
 wait_for 15 eval '! alive "$watcher"' || fail "watcher $watcher still running after SessionEnd"
 not_held || fail "held marker left behind after SessionEnd"
