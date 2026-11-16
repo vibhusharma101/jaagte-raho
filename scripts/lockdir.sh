@@ -1,5 +1,7 @@
 # Sourced by the other scripts. Sets $dir to a directory only the current user can write, for lock
 # files, or to "" if no safe one exists. Never the shared /tmp: another user could plant files there.
+# Also sets $lidflag: the file /jaagte-raho:lid on creates. Outside the temp dir, so it survives a reboot.
+lidflag=${JAAGTE_RAHO_LID_FLAG:-${XDG_CONFIG_HOME:-$HOME/.config}/jaagte-raho/lid}
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) dir=$(cygpath -u "$TEMP") ;;
   Darwin) dir="${TMPDIR:-/tmp}"; dir=${dir%/} ;;   # macOS TMPDIR is already per-user

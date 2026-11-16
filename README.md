@@ -114,12 +114,26 @@ When Claude exits, normally or by crashing, the watcher exits and the OS release
 | `JAAGTE_RAHO_INPUT_WAIT=<minutes>` | How long to stay awake while Claude waits for your input before letting the computer sleep. Default `10`. `never` keeps it awake until you answer (use this with Remote Control). |
 | `JAAGTE_RAHO_DISPLAY=0` | Windows: allow the screen to turn off. Saves battery, but on Modern Standby laptops (`powercfg /a` shows "S0 Low Power Idle") the screen turning off can put the machine into standby. |
 
+## Closing the lid
+
+By default, closing the lid follows your OS setting, and that usually means sleep. On **Windows and Linux** you can switch on the lid override:
+
+```
+/jaagte-raho:lid on
+```
+
+From then on, while Claude is working **and the machine is plugged in**, closing the lid doesn't sleep it. It follows the same rules as the rest of jaagte-raho, so it lets go as soon as Claude is done. Your setting comes back exactly as it was:
+
+- **On battery, the lid sleeps the machine as usual.** Unplug it and close the lid, and it sleeps, so it never runs closed in a bag. Still, a closed laptop running Claude gets warm: keep it on a hard surface.
+- **Windows** changes only the *plugged in* lid action of your power plan to *Do nothing*, and saves the old value first. It puts the old value back when the last session that needed it is done, including after a crash or reboot (the next session does it). `/jaagte-raho:lid off` puts it back too. No admin rights needed.
+- **Linux** adds `handle-lid-switch` to the same `systemd-inhibit` lock. The OS lifts it the moment the lock ends, so nothing can be left behind. It's dropped within seconds of unplugging.
+- **macOS** isn't supported yet (it needs admin rights).
+
+`/jaagte-raho:lid off` turns it off; `/jaagte-raho:lid` shows whether it's on and what closing the lid does right now. The setting is kept in `~/.config/jaagte-raho/lid` and survives a restart.
+
 ## What it can't do
 
-- **Closing the lid.** jaagte-raho stops *idle* sleep only, and so does `caffeinate -i`. Closing the lid follows your OS lid setting, which apps aren't allowed to override. `/jaagte-raho:status` shows what closing the lid does on your machine.
-  - Windows: set *Control Panel → Power Options → Choose what closing the lid does → Do nothing*.
-  - macOS: the lid sleeps the Mac unless it's on power with an external display (clamshell mode).
-  - Linux: logind's `HandleLidSwitch` setting decides.
+- **Closing the lid on a Mac.** jaagte-raho stops *idle* sleep only on macOS, like `caffeinate -i`: the lid sleeps a Mac unless it's on power with an external display (clamshell mode). Keeping a Mac awake with its lid closed needs admin rights (`pmset disablesleep`), which isn't supported yet. On Windows and Linux, see [Closing the lid](#closing-the-lid).
 - **tmux won't help either.** tmux keeps programs running when the terminal or SSH connection goes away, not when the computer sleeps. A tmux on a remote server survives your laptop lid only because the server never sleeps.
 - **Cloud sessions** (claude.ai/code) run on Anthropic's servers and don't need your machine awake at all. This is for local sessions: terminal, IDE, Remote Control.
 - **Battery.** It keeps the machine awake on battery until Claude finishes, and while a scheduled run is due. An hourly cron job means staying awake until you delete it.
@@ -135,6 +149,8 @@ When Claude exits, normally or by crashing, the watcher exits and the OS release
 | `watcher did not start within 10s` (Windows) | PowerShell may be blocked by policy on your machine. Run `/jaagte-raho:status` and open an issue with the output. |
 | `Removed leftover files from N ended session(s)` | Files left by a watcher that crashed or was killed. They held nothing; status cleans them up. |
 | A session shows no folder or prompt      | It started before you updated the plugin. Restart it (`/exit`, then `claude --continue`). |
+| `lid override: ...` error in status (Linux) | Your session isn't allowed to inhibit the lid switch via polkit. The idle lock still works. |
+| Lid stays on *Do nothing* (Windows) | Run `/jaagte-raho:lid off`; it puts back the value it saved. |
 | Stays awake after an interrupted turn    | Expected for ~60 s, until Claude Code sends `idle_prompt`. If it lasts longer, run `/jaagte-raho:status` and open an issue. |
 
 ## Requirements
@@ -149,7 +165,7 @@ When Claude exits, normally or by crashing, the watcher exits and the OS release
 
 ## Development
 
-`tests/e2e.sh` runs a stand-in Claude process and walks a session through its whole life: idle (not held), prompt (held, and the OS reports it), turn ending with background tasks (still held), turn ending with none (released), `idle_prompt` (released), a permission prompt (held for the grace period, released after it, held again once answered), Claude exiting mid-turn and `SessionEnd` (watcher gone, lock released). CI runs it on Windows, macOS and Linux on every push.
+`tests/e2e.sh` runs a stand-in Claude process and walks a session through its whole life: idle (not held), prompt (held, and the OS reports it), turn ending with background tasks (still held), turn ending with none (released), `idle_prompt` (released), a permission prompt (held for the grace period, released after it, held again once answered), the lid override with two sessions (on while either works, put back only after the last, and after a crash), Claude exiting mid-turn and `SessionEnd` (watcher gone, lock released). CI runs it on Windows, macOS and Linux on every push.
 
 Before each release, also do the one thing CI can't — a real sleep test on each OS:
 

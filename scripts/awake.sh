@@ -98,7 +98,7 @@ case "$1" in
     fi
     exit 0 ;;
   idle) rm -f "$base.busy" "$base.wait"; exit 0 ;;
-  end) rm -f "$base.busy" "$base.wait" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until"; exit 0 ;;
+  end) rm -f "$base.busy" "$base.wait" "$base.lid" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until"; exit 0 ;;
   start) ;;
   *) exit 0 ;;
 esac
@@ -109,7 +109,8 @@ printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\
 
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
-    report "$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/awake.ps1" -Session "$sid" | tr -d '\r' | tail -n1)" ;;
+    report "$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/awake.ps1" -Session "$sid" \
+      -LidFlag "$(cygpath -w "$lidflag")" | tr -d '\r' | tail -n1)" ;;
 esac
 
 # Walk up the process tree to the Claude process (native binary "claude", or "node" for npm installs).
@@ -136,6 +137,6 @@ case "$(uname -s)" in
 esac
 
 # No inherited stdio, so Claude doesn't wait on the background watcher before continuing.
-nohup bash "$root/scripts/watch.sh" "$base" "$pid" </dev/null >/dev/null 2>"$base.log" &
+nohup bash "$root/scripts/watch.sh" "$base" "$pid" "$lidflag" </dev/null >/dev/null 2>"$base.log" &
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -f "$base.pid" ] && report ok; sleep 0.2; done
 report "error: watcher did not start"

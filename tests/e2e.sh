@@ -176,6 +176,57 @@ pass "durable jobs in .claude/scheduled_tasks.json: lock held while they exist"
 hook_event end "$sid"
 if [ -n "$win" ]; then taskkill //PID "$claude" //F >/dev/null; else kill "$claude"; fi
 
+# --- Sessions 4 and 5: the lid override (Windows, Linux). It's one setting for the whole machine:
+# on while either session works, put back only when the last one lets go, and after a crash.
+lid_test() {
+  export JAAGTE_RAHO_LID_FLAG="$work/lid"
+  if [ -n "$win" ]; then
+    lid_ac() {
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -Lid \
+        | tr -d '\r' | sed -n '1s/^plugged in: \([^,]*\),.*/\1/p'
+    }
+    before=$(lid_ac)
+    [ -n "$before" ] || { echo "SKIP: lid override: this machine's power plan has no lid setting"; return 0; }
+    # Whatever happens, never leave this machine's lid setting changed.
+    trap 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -RestoreLid >/dev/null' EXIT
+    lid_on() { [ "$(lid_ac)" = "do nothing" ]; }
+    lid_back() { [ "$(lid_ac)" = "$before" ] && [ ! -f "$dir/jaagte-raho-lid.orig" ]; }
+  else
+    lid_on() { systemd-inhibit --list 2>/dev/null | grep -i "claude code" | grep -q handle-lid-switch; }
+    lid_back() { ! lid_on; }
+  fi
+  bash "$root/scripts/lid.sh" on | grep -q "Lid override: on" || fail "lid on: $(bash "$root/scripts/lid.sh" on)"
+
+  sid_a="e2e-$$-d"; start_claude "$sid_a"; claude_a=$claude; base_a=$base
+  sid_b="e2e-$$-e"; start_claude "$sid_b"; claude_b=$claude; base_b=$base
+  sleep 3; lid_back || fail "lid override on while both sessions are idle"
+  hook_event busy "$sid_a"
+  wait_for 15 lid_on || fail "lid override not applied while Claude is working"
+  pass "lid override on, Claude working: closing the lid won't sleep the machine"
+  hook_event busy "$sid_b"
+  hook_event stop "$sid_a" ',"background_tasks":[]'
+  sleep 5; lid_on || fail "lid setting put back while the other session was still working"
+  hook_event stop "$sid_b" ',"background_tasks":[]'
+  wait_for 15 lid_back || fail "lid setting not put back after the last session finished"
+  pass "two sessions: lid setting put back only once the last one finished"
+
+  hook_event busy "$sid_a"
+  wait_for 15 lid_on || fail "lid override not applied again"
+  if [ -n "$win" ]; then taskkill //PID "$claude_a" //F >/dev/null; else kill "$claude_a"; fi
+  wait_for 20 lid_back || fail "lid setting not put back after Claude crashed"
+  pass "Claude crashed with the lid override on: lid setting put back"
+
+  bash "$root/scripts/lid.sh" off | grep -q "Lid override: off" || fail "lid off failed"
+  base=$base_b; hook_event busy "$sid_b"
+  wait_for 10 held || fail "lock not held with the lid override off"
+  sleep 3; lid_back || fail "lid override applied while switched off"
+  pass "lid override off: idle lock only, lid setting untouched"
+  hook_event end "$sid_b"
+  if [ -n "$win" ]; then taskkill //PID "$claude_b" //F >/dev/null; else kill "$claude_b"; fi
+  unset JAAGTE_RAHO_LID_FLAG
+}
+[ "$(uname -s)" = Darwin ] || lid_test
+
 # --- Session 3: SessionEnd (e.g. /clear) stops the watcher while Claude keeps running
 sid="e2e-$$-b"
 start_claude "$sid"
