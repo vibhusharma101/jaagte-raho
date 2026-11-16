@@ -7,7 +7,10 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 . "$root/scripts/lockdir.sh"
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) os=windows ;; Darwin) os=mac ;; *) os=linux ;; esac
 
-ps1() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$root/scripts/awake.ps1")" "$@" | tr -d '\r'; }
+ps1() {
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$root/scripts/awake.ps1")" "$@" \
+    -LidFlag "$(cygpath -w "$lidflag")" | tr -d '\r'
+}
 
 if [ "$os" = mac ]; then
   echo "The lid override isn't available on macOS yet: it needs admin rights (pmset disablesleep)."

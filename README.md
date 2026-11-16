@@ -129,7 +129,7 @@ From then on, while Claude is working **and the machine is plugged in**, closing
 - **Linux** adds `handle-lid-switch` to the same `systemd-inhibit` lock. The OS lifts it the moment the lock ends, so nothing can be left behind. It's dropped within seconds of unplugging.
 - **macOS** isn't supported yet (it needs admin rights).
 
-`/jaagte-raho:lid off` turns it off; `/jaagte-raho:lid` shows whether it's on and what closing the lid does right now. The setting is kept in `~/.config/jaagte-raho/lid` and survives a restart.
+`/jaagte-raho:lid off` turns it off; `/jaagte-raho:lid` shows whether it's on and what closing the lid does right now. The switch is kept in `~/.config/jaagte-raho/lid` and survives a restart. On Windows, the saved original lid value sits next to it (`lid.orig`), outside the Temp folder, so disk cleanup can't delete it while the setting is changed.
 
 ## What it can't do
 

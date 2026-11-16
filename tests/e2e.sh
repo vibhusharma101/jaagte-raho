@@ -183,14 +183,14 @@ lid_test() {
   if [ -n "$win" ]; then
     lid_ac() {
       powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -Lid \
-        | tr -d '\r' | sed -n '1s/^plugged in: \([^,]*\),.*/\1/p'
+        -LidFlag "$(native "$work/lid")" | tr -d '\r' | sed -n '1s/^plugged in: \([^,]*\),.*/\1/p'
     }
     before=$(lid_ac)
     [ -n "$before" ] || { echo "SKIP: lid override: this machine's power plan has no lid setting"; return 0; }
     # Whatever happens, never leave this machine's lid setting changed.
-    trap 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -RestoreLid >/dev/null' EXIT
+    trap 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -RestoreLid -LidFlag "$(native "$work/lid")" >/dev/null' EXIT
     lid_on() { [ "$(lid_ac)" = "do nothing" ]; }
-    lid_back() { [ "$(lid_ac)" = "$before" ] && [ ! -f "$dir/jaagte-raho-lid.orig" ]; }
+    lid_back() { [ "$(lid_ac)" = "$before" ] && [ ! -f "$work/lid.orig" ]; }
   else
     lid_on() { systemd-inhibit --list 2>/dev/null | grep -i "claude code" | grep -q handle-lid-switch; }
     lid_back() { ! lid_on; }

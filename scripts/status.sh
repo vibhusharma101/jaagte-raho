@@ -81,7 +81,8 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
     echo "--- Closing the lid (lid override: $override) ---"
     root="$(cd "$(dirname "$0")/.." && pwd)"
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$root/scripts/awake.ps1")" -Lid | tr -d '\r' \
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$root/scripts/awake.ps1")" -Lid \
+      -LidFlag "$(cygpath -w "$lidflag")" | tr -d '\r' \
       | sed '1s/^/Lid action: /'
     [ "$override" = on ] \
       || echo "To keep Claude working with the lid closed while plugged in: /jaagte-raho:lid on" ;;

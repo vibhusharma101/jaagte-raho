@@ -13,13 +13,15 @@ param([string]$Session, [int]$Watch = 0, [switch]$Lid, [switch]$RestoreLid, [str
 # While a session holds the lock, closing the lid does nothing. Only the plugged-in (AC) value of
 # the lid setting changes, so on battery closing the lid still sleeps the machine. The lid setting is
 # one value for the whole machine, shared by every session: the value found is saved once in
-# jaagte-raho-lid.orig ("<plan guid> <value>"), each session that needs the override marks
+# lid.orig ("<plan guid> <value>"), next to the switch file rather than in Temp, so disk cleanup
+# can't delete it while the setting is changed. Each session that needs the override marks
 # <base>.lid, and whoever lets go last puts the saved value back. A watcher that finds a saved value
 # with no live session behind it (after a crash or reboot) also puts it back, as does
 # /jaagte-raho:lid off. Changes happen under a mutex, so two sessions never save each other's value.
 $lidGuid = '5ca83367-6e45-459f-a27b-476b1d01c936'   # LIDACTION
 $lidNames = 'do nothing', 'sleep', 'hibernate', 'shut down'
-$orig = Join-Path $env:TEMP 'jaagte-raho-lid.orig'
+if (-not $LidFlag) { $LidFlag = Join-Path $HOME '.config\jaagte-raho\lid' }
+$orig = Join-Path (Split-Path $LidFlag) 'lid.orig'
 
 function Get-ActiveScheme {
   [regex]::Match((powercfg /getactivescheme), '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}').Value
@@ -55,7 +57,9 @@ function Invoke-LidLocked([scriptblock]$body) {
 function Restore-LidIfUnused {   # call under the mutex
   if (-not (Test-Path $orig) -or (Test-LidHolders)) { return }
   $scheme, $value = ([string](Get-Content $orig | Select-Object -First 1)).Trim() -split ' '
-  if ($scheme -and $value -match '^[0-3]$') { Set-LidAc $scheme $value }
+  if ($scheme -match '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$' -and $value -match '^[0-3]$') {
+    Set-LidAc $scheme $value
+  }
   Remove-Item $orig -ErrorAction SilentlyContinue
 }
 
