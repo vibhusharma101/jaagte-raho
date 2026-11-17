@@ -8,6 +8,16 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 hook="$root/scripts/awake.sh"
 work="$(mktemp -d)"
 fail() { echo "FAIL: $*"; exit 1; }
+# On exit, pass or fail: put back a lid setting the lid test changed, and remove this run's files.
+cleanup() {
+  if [ -n "${lid_restore:-}" ]; then
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -RestoreLid \
+      -LidFlag "$(native "$work/lid")" >/dev/null
+  fi
+  [ -n "${dir:-}" ] && rm -f "$dir"/jaagte-raho-e2e-$$-*
+  rm -rf "$work"
+}
+trap cleanup EXIT
 pass() { echo "PASS: $*"; }
 
 . "$root/scripts/lockdir.sh"
@@ -57,6 +67,7 @@ start_claude() {
     fs.writeFileSync(process.env.OUT, execFileSync(process.env.BASH_BIN, [process.env.HOOK, "start"], { input }));
     setInterval(() => {}, 1000);
   ' &
+  disown $!   # it gets killed on purpose later; don't let bash report "Terminated"
   wait_for 30 test -s "$work/out" || fail "SessionStart hook produced no output"
   echo "SessionStart output: $(cat "$work/out")"
   grep -q 'jaagte-raho: on' "$work/out" || fail "SessionStart did not report success"
@@ -187,8 +198,7 @@ lid_test() {
     }
     before=$(lid_ac)
     [ -n "$before" ] || { echo "SKIP: lid override: this machine's power plan has no lid setting"; return 0; }
-    # Whatever happens, never leave this machine's lid setting changed.
-    trap 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -RestoreLid -LidFlag "$(native "$work/lid")" >/dev/null' EXIT
+    lid_restore=1   # whatever happens, cleanup never leaves this machine's lid setting changed
     lid_on() { [ "$(lid_ac)" = "do nothing" ]; }
     lid_back() { [ "$(lid_ac)" = "$before" ] && [ ! -f "$work/lid.orig" ]; }
   else
@@ -236,5 +246,16 @@ wait_for 10 held || fail "session 3: lock not held after a prompt"
 hook_event end "$sid"
 wait_for 15 eval '! alive "$watcher"' || fail "watcher $watcher still running after SessionEnd"
 not_held || fail "held marker left behind after SessionEnd"
-pass "SessionEnd: lock released, watcher gone"
+leftover=$(ls "$base".* 2>/dev/null || true)
+[ -z "$leftover" ] || fail "files left behind after SessionEnd: $leftover"
+pass "SessionEnd: lock released, watcher gone, no files left behind"
+
+# Status drops logs of ended sessions once they're empty or old, but still reports a fresh error.
+old="$dir/jaagte-raho-e2e-$$-x.log" fresh="$dir/jaagte-raho-e2e-$$-y.log"
+: > "$old"; touch -t 202001010000 "$old"
+echo "test error" > "$fresh"
+out=$(bash "$root/scripts/status.sh")
+[ ! -e "$old" ] || fail "status kept an empty log of an ended session"
+[ -e "$fresh" ] && grep -q "test error" <<< "$out" || fail "status dropped or hid a fresh error"
+pass "status: old empty logs removed, fresh errors still reported"
 if [ -n "$win" ]; then taskkill //PID "$claude" //F >/dev/null; else kill "$claude"; fi

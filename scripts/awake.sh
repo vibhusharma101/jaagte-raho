@@ -98,7 +98,8 @@ case "$1" in
     fi
     exit 0 ;;
   idle) rm -f "$base.busy" "$base.wait"; exit 0 ;;
-  end) rm -f "$base.busy" "$base.wait" "$base.lid" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until"; exit 0 ;;
+  end) rm -f "$base.busy" "$base.wait" "$base.lid" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until" \
+    "$base.lid.err" "$base.log" "$base.err"; exit 0 ;;
   start) ;;
   *) exit 0 ;;
 esac

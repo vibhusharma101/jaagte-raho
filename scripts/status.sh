@@ -32,7 +32,8 @@ for f in "$dir"/jaagte-raho-*.pid; do
   watcher=$(cat "$f")
   # A watcher that is gone holds nothing: drop its leftover files instead of listing them.
   if ! alive "$watcher"; then
-    rm -f "$base".pid "$base".busy "$base".wait "$base".lid "$base".lid.err "$base".held "$base".cwd "$base".task "$base".sched "$base".until
+    rm -f "$base".pid "$base".busy "$base".wait "$base".lid "$base".lid.err "$base".held "$base".cwd "$base".task "$base".sched "$base".until \
+      "$base".log "$base".err
     stale=$((stale + 1))
     continue
   fi
@@ -60,6 +61,17 @@ for f in "$dir"/jaagte-raho-*.pid; do
 done
 [ -n "$found" ] || echo "No sessions are being watched."
 [ "$stale" -eq 0 ] || echo "Removed leftover files from $stale ended session(s)."
+
+# Logs and errors of sessions that have ended (no .pid). Kept while recent and non-empty, so a failed
+# start can still be reported; dropped once empty or a day old.
+now=$(date +%s)
+for f in "$dir"/jaagte-raho-*.err "$dir"/jaagte-raho-*.log; do
+  [ -f "$f" ] || continue
+  b=${f%.log}; b=${b%.err}; b=${b%.lid}
+  [ -f "$b.pid" ] && continue
+  age=$(( now - $(mtime "$f") ))
+  { [ ! -s "$f" ] && [ "$age" -gt 60 ]; } || [ "$age" -gt 86400 ] && rm -f "$f"
+done
 
 for f in "$dir"/jaagte-raho-*.err "$dir"/jaagte-raho-*.log; do
   [ -s "$f" ] && echo "Last error (${f##*/}): $(head -n1 "$f")"
