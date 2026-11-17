@@ -19,6 +19,11 @@ jaagte-raho is a Claude Code plugin that holds off sleep while Claude is working
 
 Start a new session and you're done.
 
+| Command | What it does |
+|---------|--------------|
+| `/jaagte-raho:status` | Shows whether each session is keeping the computer awake, and why |
+| `/jaagte-raho:lid on` / `off` | Windows and Linux: keep Claude working with the lid closed while plugged in ([details](#closing-the-lid)) |
+
 ## What it does
 
 | What's happening                                       | Computer          |
@@ -31,6 +36,8 @@ Start a new session and you're done.
 | Claude is waiting for your answer (permission prompt, question) | **kept awake** for 10 minutes, then sleeps normally |
 | You interrupted a turn (Esc)                           | sleeps normally (within ~60 s) |
 | Claude exited or crashed                               | sleeps normally   |
+| Lid closed while Claude works, plugged in, `/jaagte-raho:lid on` (Windows, Linux) | **kept awake**, then your lid setting is put back |
+| Lid closed on battery                                  | sleeps normally, even with the lid override on |
 
 With several sessions open, the computer stays awake while **any** of them is working. Leave four finished sessions open overnight and the laptop still sleeps.
 
@@ -44,7 +51,8 @@ jaagte-raho follows what Claude is actually doing:
 - **Sleeps again on its own** once Claude is idle, interrupted, or closed.
 - **Safe if something crashes.** The lock is tied to the Claude process, so if Claude dies, the OS releases the lock. Nothing is left holding your machine awake.
 - **Handles many sessions.** Each session holds its own lock.
-- **Same behaviour on macOS, Windows and Linux**, with nothing extra to install.
+- **Optionally keeps working with the lid closed** (Windows and Linux): only while plugged in and only while Claude works, then your lid setting goes back exactly as it was. `caffeinate -i` can't do that.
+- **Same behaviour on macOS, Windows and Linux**, with nothing extra to install. The one exception is the lid override, which is Windows and Linux for now.
 
 ## You can always see whether it's working
 
