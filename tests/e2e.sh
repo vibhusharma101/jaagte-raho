@@ -11,8 +11,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 # On exit, pass or fail: put back a lid setting the lid test changed, and remove this run's files.
 cleanup() {
   if [ -n "${lid_restore:-}" ]; then
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(native "$root/scripts/awake.ps1")" -RestoreLid \
-      -LidFlag "$(native "$work/lid")" >/dev/null
+    JAAGTE_RAHO_LID_FLAG="$work/lid" bash "$root/scripts/lid.sh" off >/dev/null 2>&1 || true
   fi
   [ -n "${dir:-}" ] && rm -f "$dir"/jaagte-raho-e2e-$$-*
   rm -rf "$work"
@@ -100,7 +99,7 @@ hook_event stop "$sid" ',"background_tasks":[]'
 wait_for 10 not_held || fail "lock still held after the turn finished"
 pass "turn finished with nothing in the background: lock released"
 
-bash "$root/scripts/status.sh" | grep -Eq "Session ${sid:0:8}( (.*))?: Claude idle" || fail "status command does not show the idle session"
+bash "$root/scripts/status.sh" | grep -E "Session ${sid:0:8}( (.*))?: Claude idle" >/dev/null || fail "status command does not show the idle session"
 pass "status command reports the session"
 
 hook_event busy "$sid"
@@ -121,7 +120,7 @@ pass "permission prompt within the grace period: lock still held"
 sleep 1
 JAAGTE_RAHO_INPUT_WAIT=0 hook_event wait "$sid" "$tjson"
 wait_for 10 not_held || fail "lock still held after the permission prompt's grace period ran out"
-bash "$root/scripts/status.sh" | grep -q "waiting for your input" || fail "status does not show the session waiting for input"
+bash "$root/scripts/status.sh" | grep "waiting for your input" >/dev/null || fail "status does not show the session waiting for input"
 pass "permission prompt past the grace period: lock released, status says it's waiting"
 sleep 1; echo '{"type":"user"}' >> "$transcript"
 wait_for 10 held || fail "lock not held again after the permission prompt was answered"
@@ -160,7 +159,7 @@ sched() {  # sched <tool> <tool_response JSON>
 
 sched ScheduleWakeup "{\"scheduledFor\":$(( ($(date +%s) + 300) * 1000 )),\"clampedDelaySeconds\":300,\"wasClamped\":false}"
 wait_for 10 held || fail "lock not held while a /loop wakeup is due"
-bash "$root/scripts/status.sh" | grep -q "scheduled run due" || fail "status does not show the due wakeup"
+bash "$root/scripts/status.sh" | grep "scheduled run due" >/dev/null || fail "status does not show the due wakeup"
 sched ScheduleWakeup '{"scheduledFor":0,"clampedDelaySeconds":0,"wasClamped":false,"stopped":true}'
 wait_for 10 not_held || fail "lock still held after the loop was stopped"
 pass "/loop wakeup due: lock held until the loop stopped"
@@ -187,7 +186,7 @@ pass "durable jobs in .claude/scheduled_tasks.json: lock held while they exist"
 hook_event end "$sid"
 if [ -n "$win" ]; then taskkill //PID "$claude" //F >/dev/null; else kill "$claude"; fi
 
-# --- Sessions 4 and 5: the lid override (Windows, Linux). It's one setting for the whole machine:
+# --- Sessions 4 and 5: the lid override. It's one setting for the whole machine:
 # on while either session works, put back only when the last one lets go, and after a crash.
 lid_test() {
   export JAAGTE_RAHO_LID_FLAG="$work/lid"
@@ -201,11 +200,23 @@ lid_test() {
     lid_restore=1   # whatever happens, cleanup never leaves this machine's lid setting changed
     lid_on() { [ "$(lid_ac)" = "do nothing" ]; }
     lid_back() { [ "$(lid_ac)" = "$before" ] && [ ! -f "$work/lid.orig" ]; }
+  elif [ "$(uname -s)" = Darwin ]; then
+    # Never asks for a password: runs only where pmset disablesleep is already allowed without one
+    # (CI runners, or a Mac where /jaagte-raho:lid on has set it up).
+    sudo -n -l /usr/bin/pmset -a disablesleep 1 >/dev/null 2>&1 \
+      || { echo "SKIP: lid override: pmset disablesleep needs a password here (run /jaagte-raho:lid on once)"; return 0; }
+    pmset -g batt | head -n1 | grep -q "AC Power" || { echo "SKIP: lid override: this Mac is on battery"; return 0; }
+    sd() { pmset -g | awk '/SleepDisabled/ { print $2; exit }'; }
+    before=$(sd)
+    [ "${before:-0}" = 0 ] || { echo "SKIP: lid override: sleep is already disabled on this Mac"; return 0; }
+    lid_restore=1   # whatever happens, cleanup never leaves sleep disabled
+    lid_on() { [ "$(sd)" = 1 ]; }
+    lid_back() { [ "$(sd)" != 1 ] && [ ! -f "$work/lid.orig" ]; }
   else
     lid_on() { systemd-inhibit --list 2>/dev/null | grep -i "claude code" | grep -q handle-lid-switch; }
     lid_back() { ! lid_on; }
   fi
-  bash "$root/scripts/lid.sh" on | grep -q "Lid override: on" || fail "lid on: $(bash "$root/scripts/lid.sh" on)"
+  bash "$root/scripts/lid.sh" on | grep "Lid override: on" >/dev/null || fail "lid on: $(bash "$root/scripts/lid.sh" on)"
 
   sid_a="e2e-$$-d"; start_claude "$sid_a"; claude_a=$claude; base_a=$base
   sid_b="e2e-$$-e"; start_claude "$sid_b"; claude_b=$claude; base_b=$base
@@ -226,7 +237,7 @@ lid_test() {
   wait_for 20 lid_back || fail "lid setting not put back after Claude crashed"
   pass "Claude crashed with the lid override on: lid setting put back"
 
-  bash "$root/scripts/lid.sh" off | grep -q "Lid override: off" || fail "lid off failed"
+  bash "$root/scripts/lid.sh" off | grep "Lid override: off" >/dev/null || fail "lid off failed"
   base=$base_b; hook_event busy "$sid_b"
   wait_for 10 held || fail "lock not held with the lid override off"
   sleep 3; lid_back || fail "lid override applied while switched off"
@@ -235,7 +246,22 @@ lid_test() {
   if [ -n "$win" ]; then taskkill //PID "$claude_b" //F >/dev/null; else kill "$claude_b"; fi
   unset JAAGTE_RAHO_LID_FLAG
 }
-[ "$(uname -s)" = Darwin ] || lid_test
+lid_test
+
+# macOS, CI only (passwordless sudo, throwaway machine): the one-time setup installs a sudoers rule
+# that visudo accepts, owned by root, mode 0440, allowing only pmset disablesleep; uninstall removes it.
+if [ "$(uname -s)" = Darwin ] && [ -n "${CI:-}" ] && sudo -n true 2>/dev/null; then
+  rule=/etc/sudoers.d/jaagte-raho
+  out=$(bash "$root/scripts/lid.sh" setup)
+  grep -q "Set up: $rule" <<< "$out" || fail "lid setup: $out"
+  [ "$(stat -f '%Su %Sg %Lp' "$rule")" = "root wheel 440" ] || fail "sudoers rule has owner/mode $(stat -f '%Su %Sg %Lp' "$rule")"
+  sudo -n /usr/sbin/visudo -cf "$rule" >/dev/null || fail "visudo rejects the installed rule"
+  sudo -n cat "$rule" | grep -v '^#' | grep -Eq "^$(id -un) ALL=\(root\) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1$" \
+    || fail "sudoers rule allows more than pmset disablesleep 0|1: $(sudo -n cat "$rule")"
+  JAAGTE_RAHO_LID_FLAG="$work/lid" bash "$root/scripts/lid.sh" uninstall | grep "Removed $rule" >/dev/null || fail "lid uninstall didn't remove the rule"
+  [ ! -e "$rule" ] || fail "sudoers rule still there after uninstall"
+  pass "macOS setup: sudoers rule valid, root-owned, 0440, pmset disablesleep only; uninstall removes it"
+fi
 
 # --- Session 3: SessionEnd (e.g. /clear) stops the watcher while Claude keeps running
 sid="e2e-$$-b"

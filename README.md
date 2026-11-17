@@ -22,7 +22,7 @@ Start a new session and you're done.
 | Command | What it does |
 |---------|--------------|
 | `/jaagte-raho:status` | Shows whether each session is keeping the computer awake, and why |
-| `/jaagte-raho:lid on` / `off` | Windows and Linux: keep Claude working with the lid closed while plugged in ([details](#closing-the-lid)) |
+| `/jaagte-raho:lid on` / `off` | Keep Claude working with the lid closed while plugged in ([details](#closing-the-lid)) |
 
 ## What it does
 
@@ -36,7 +36,7 @@ Start a new session and you're done.
 | Claude is waiting for your answer (permission prompt, question) | **kept awake** for 10 minutes, then sleeps normally |
 | You interrupted a turn (Esc)                           | sleeps normally (within ~60 s) |
 | Claude exited or crashed                               | sleeps normally   |
-| Lid closed while Claude works, plugged in, `/jaagte-raho:lid on` (Windows, Linux) | **kept awake**, then your lid setting is put back |
+| Lid closed while Claude works, plugged in, `/jaagte-raho:lid on` | **kept awake**, then your lid setting is put back |
 | Lid closed on battery                                  | sleeps normally, even with the lid override on |
 
 With several sessions open, the computer stays awake while **any** of them is working. Leave four finished sessions open overnight and the laptop still sleeps.
@@ -51,8 +51,8 @@ jaagte-raho follows what Claude is actually doing:
 - **Sleeps again on its own** once Claude is idle, interrupted, or closed.
 - **Safe if something crashes.** The lock is tied to the Claude process, so if Claude dies, the OS releases the lock. Nothing is left holding your machine awake.
 - **Handles many sessions.** Each session holds its own lock.
-- **Optionally keeps working with the lid closed** (Windows and Linux): only while plugged in and only while Claude works, then your lid setting goes back exactly as it was. `caffeinate -i` can't do that.
-- **Same behaviour on macOS, Windows and Linux**, with nothing extra to install. The one exception is the lid override, which is Windows and Linux for now.
+- **Optionally keeps working with the lid closed**: only while plugged in and only while Claude works, then your lid setting goes back exactly as it was. `caffeinate -i` can't do that.
+- **Same behaviour on macOS, Windows and Linux**, with nothing extra to install.
 
 ## You can always see whether it's working
 
@@ -124,7 +124,7 @@ When Claude exits, normally or by crashing, the watcher exits and the OS release
 
 ## Closing the lid
 
-By default, closing the lid follows your OS setting, and that usually means sleep. On **Windows and Linux** you can switch on the lid override:
+By default, closing the lid follows your OS setting, and that usually means sleep. You can switch on the lid override:
 
 ```
 /jaagte-raho:lid on
@@ -135,13 +135,12 @@ From then on, while Claude is working **and the machine is plugged in**, closing
 - **On battery, the lid sleeps the machine as usual.** Unplug it and close the lid, and it sleeps, so it never runs closed in a bag. Still, a closed laptop running Claude gets warm: keep it on a hard surface.
 - **Windows** changes only the *plugged in* lid action of your power plan to *Do nothing*, and saves the old value first. It puts the old value back when the last session that needed it is done, including after a crash or reboot (the next session does it). `/jaagte-raho:lid off` puts it back too. No admin rights needed.
 - **Linux** adds `handle-lid-switch` to the same `systemd-inhibit` lock. The OS lifts it the moment the lock ends, so nothing can be left behind. It's dropped within seconds of unplugging.
-- **macOS** isn't supported yet (it needs admin rights).
+- **macOS** uses `pmset -a disablesleep 1`, which needs admin rights. The first `/jaagte-raho:lid on` asks for your password once and installs `/etc/sudoers.d/jaagte-raho`. That rule allows exactly `/usr/bin/pmset -a disablesleep 0` and `... 1` without a password, and nothing else. It's checked with `visudo` before and after it's installed. After that it works like Windows: the old value is saved first and put back when the last session is done, after a crash or reboot, or by `/jaagte-raho:lid off`. It's put back within seconds of unplugging. If the lid is already closed when that happens, and macOS says a closed lid should sleep (no external display), jaagte-raho puts the Mac to sleep right away. `/jaagte-raho:lid uninstall` turns it off and removes the rule; `/jaagte-raho:lid setup` puts it back.
 
-`/jaagte-raho:lid off` turns it off; `/jaagte-raho:lid` shows whether it's on and what closing the lid does right now. The switch is kept in `~/.config/jaagte-raho/lid` and survives a restart. On Windows, the saved original lid value sits next to it (`lid.orig`), outside the Temp folder, so disk cleanup can't delete it while the setting is changed.
+`/jaagte-raho:lid off` turns it off; `/jaagte-raho:lid` shows whether it's on and what closing the lid does right now. The switch is kept in `~/.config/jaagte-raho/lid` and survives a restart. On Windows and macOS, the saved original value sits next to it (`lid.orig`), outside the Temp folder, so disk cleanup can't delete it while the setting is changed.
 
 ## What it can't do
 
-- **Closing the lid on a Mac.** jaagte-raho stops *idle* sleep only on macOS, like `caffeinate -i`: the lid sleeps a Mac unless it's on power with an external display (clamshell mode). Keeping a Mac awake with its lid closed needs admin rights (`pmset disablesleep`), which isn't supported yet. On Windows and Linux, see [Closing the lid](#closing-the-lid).
 - **tmux won't help either.** tmux keeps programs running when the terminal or SSH connection goes away, not when the computer sleeps. A tmux on a remote server survives your laptop lid only because the server never sleeps.
 - **Cloud sessions** (claude.ai/code) run on Anthropic's servers and don't need your machine awake at all. This is for local sessions: terminal, IDE, Remote Control.
 - **Battery.** It keeps the machine awake on battery until Claude finishes, and while a scheduled run is due. An hourly cron job means staying awake until you delete it.
@@ -159,6 +158,8 @@ From then on, while Claude is working **and the machine is plugged in**, closing
 | A session shows no folder or prompt      | It started before you updated the plugin. Restart it (`/exit`, then `claude --continue`). |
 | `lid override: ...` error in status (Linux) | Your session isn't allowed to inhibit the lid switch via polkit. The idle lock still works. |
 | Lid stays on *Do nothing* (Windows) | Run `/jaagte-raho:lid off`; it puts back the value it saved. |
+| Mac doesn't sleep at all after using the lid override | Run `/jaagte-raho:lid off`. If that fails, run `sudo pmset -a disablesleep 0` in Terminal. |
+| `Setup didn't finish` (macOS) | The password dialog was cancelled, or there's no screen to show it on (SSH). Run `/jaagte-raho:lid on` from a session on the Mac itself. |
 | Stays awake after an interrupted turn    | Expected for ~60 s, until Claude Code sends `idle_prompt`. If it lasts longer, run `/jaagte-raho:status` and open an issue. |
 
 ## Requirements

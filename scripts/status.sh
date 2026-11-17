@@ -99,12 +99,23 @@ case "$(uname -s)" in
     [ "$override" = on ] \
       || echo "To keep Claude working with the lid closed while plugged in: /jaagte-raho:lid on" ;;
   Darwin)
-    echo "--- Closing the lid (jaagte-raho can't prevent this on macOS yet) ---"
+    echo "--- Closing the lid (lid override: $override) ---"
+    maclid_orig="$(dirname "$lidflag")/lid.orig"
     if pmset -g | grep -Eq 'SleepDisabled[[:space:]]+1'; then
-      echo "Sleep is disabled system-wide (pmset disablesleep 1), so closing the lid won't sleep this Mac"
+      if [ -f "$maclid_orig" ]; then
+        echo "lid override: active, closing the lid won't sleep this Mac while Claude works; puts disablesleep back to $(cat "$maclid_orig") once Claude is done"
+      else
+        echo "Sleep is disabled system-wide (pmset disablesleep 1), so closing the lid won't sleep this Mac"
+      fi
     else
-      echo "Closing the lid sleeps this Mac; macOS doesn't let apps prevent that. It stays awake only when on power with an external display (clamshell mode)"
-    fi ;;
+      echo "Closing the lid sleeps this Mac. It stays awake only when on power with an external display (clamshell mode)"
+      if [ "$override" = on ]; then
+        echo "lid override: on, takes effect while Claude is working and the Mac is on power"
+      else
+        echo "To keep Claude working with the lid closed while on power: /jaagte-raho:lid on (asks for your password once)"
+      fi
+    fi
+    pmset -g batt | head -n1 | grep -q "AC Power" || echo "On battery: closing the lid sleeps this Mac, lid override or not" ;;
   Linux)
     echo "--- Closing the lid (lid override: $override) ---"
     lid() { busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager "$1" 2>/dev/null | sed 's/^s "\(.*\)"$/\1/'; }
