@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Session watcher for macOS/Linux: watch.sh <base> <claude pid>.
+# Session watcher for macOS/Linux: watch.sh <base> <claude pid> [<lid switch file>].
 # Holds the OS keep-awake lock while <base>.busy exists (unless Claude has waited on your input past
 # the grace period) or a scheduled run is due, and marks it
 # with <base>.held.
@@ -73,7 +73,24 @@ asleep_ok() {
   [ "$(date +%s)" -ge "$until" ] 2>/dev/null
 }
 
-trap 'release; exit 0' TERM INT
+# macOS: the lid override (maclid.sh) is on while this session holds the lock, the switch is on and
+# the Mac is on AC power. Unplugging puts disablesleep back within seconds. A failed restore is
+# retried about once a minute, so the log doesn't fill up.
+maclid= retry=0
+if [ "$(uname -s)" = Darwin ] && [ -n "$lidflag" ]; then
+  dir=$(dirname "$base"); . "$(dirname "$0")/maclid.sh"; maclid=1
+fi
+mac_lid() {
+  [ -n "$maclid" ] || return 0
+  if [ -n "$holder" ] && [ -f "$lidflag" ] && [ -z "$lid_failed" ] && maclid_on_ac; then
+    [ -f "$base.lid" ] || maclid_locked maclid_apply || lid_failed=1
+  elif [ -f "$base.lid" ] || [ -f "$maclid_orig" ]; then
+    [ "$retry" -gt 0 ] && { retry=$((retry - 1)); return 0; }
+    maclid_locked maclid_release || retry=30
+  fi
+}
+
+trap 'release; mac_lid; exit 0' TERM INT
 while kill -0 "$claude" 2>/dev/null && [ "$(cat "$base.pid" 2>/dev/null)" = "$$" ]; do
   if { [ -f "$base.busy" ] && ! asleep_ok; } || due; then
     lid=; lid_wanted && lid=lid
@@ -87,6 +104,8 @@ while kill -0 "$claude" 2>/dev/null && [ "$(cat "$base.pid" 2>/dev/null)" = "$$"
     release
   fi
   [ -n "$lidflag" ] && [ ! -f "$lidflag" ] && lid_failed=
+  mac_lid
   sleep 2
 done
 release
+retry=0; mac_lid
