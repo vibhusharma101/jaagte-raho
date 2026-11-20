@@ -23,6 +23,7 @@ Start a new session and you're done.
 |---------|--------------|
 | `/jaagte-raho:status` | Shows whether each session is keeping the computer awake, and why |
 | `/jaagte-raho:lid on` / `off` | Keep Claude working with the lid closed while plugged in ([details](#closing-the-lid)) |
+| `/jaagte-raho:notify` / `test` | Slack or Discord pings when a long run finishes or Claude waits for you ([details](#notifications)) |
 
 ## What it does
 
@@ -120,6 +121,9 @@ When Claude exits, normally or by crashing, the watcher exits and the OS release
 | Env var                 | Effect                                                                 |
 |-------------------------|------------------------------------------------------------------------|
 | `JAAGTE_RAHO_INPUT_WAIT=<minutes>` | How long to stay awake while Claude waits for your input before letting the computer sleep. Default `10`. `never` keeps it awake until you answer (use this with Remote Control). |
+| `JAAGTE_RAHO_NOTIFY_URL=<url>` | Slack or Discord webhook for [notifications](#notifications), instead of the `notify-url` file. |
+| `JAAGTE_RAHO_NOTIFY_AFTER=<minutes>` | Ping when a run finishes only if it ran at least this long. Default `10`. |
+| `JAAGTE_RAHO_STALL_AFTER=<minutes>` | Ping when Claude has waited this long for your input. Default `5`. |
 | `JAAGTE_RAHO_DISPLAY=0` | Windows: allow the screen to turn off. Saves battery, but on Modern Standby laptops (`powercfg /a` shows "S0 Low Power Idle") the screen turning off can put the machine into standby. |
 
 ## Closing the lid
@@ -138,6 +142,29 @@ From then on, while Claude is working **and the machine is plugged in**, closing
 - **macOS** uses `pmset -a disablesleep 1`, which needs admin rights. The first `/jaagte-raho:lid on` asks for your password once and installs `/etc/sudoers.d/jaagte-raho`. That rule allows exactly `/usr/bin/pmset -a disablesleep 0` and `... 1` without a password, and nothing else. It's checked with `visudo` before and after it's installed. After that it works like Windows: the old value is saved first and put back when the last session is done, after a crash or reboot, or by `/jaagte-raho:lid off`. It's put back within seconds of unplugging. If the lid is already closed when that happens, and macOS says a closed lid should sleep (no external display), jaagte-raho puts the Mac to sleep right away. `/jaagte-raho:lid uninstall` turns it off and removes the rule; `/jaagte-raho:lid setup` puts it back.
 
 `/jaagte-raho:lid off` turns it off; `/jaagte-raho:lid` shows whether it's on and what closing the lid does right now. The switch is kept in `~/.config/jaagte-raho/lid` and survives a restart. On Windows and macOS, the saved original value sits next to it (`lid.orig`), outside the Temp folder, so disk cleanup can't delete it while the setting is changed.
+
+## Notifications
+
+A lot of lost time isn't the run stopping. It's not noticing that it finished, or that it has been sitting on an approval prompt for an hour. jaagte-raho can ping you on **Slack or Discord**:
+
+- **When a run finishes**, if it took 10 minutes or more (`JAAGTE_RAHO_NOTIFY_AFTER`).
+- **When Claude has waited 5 minutes for your input** (`JAAGTE_RAHO_STALL_AFTER`), whether that's a permission prompt or a question. You get one ping per prompt, and none if you answer in time. That's before the computer is allowed to sleep at 10 minutes, because a sleeping laptop can't send anything.
+
+Each ping says which machine, which project folder, how long, and the start of your prompt.
+
+To turn it on, create a webhook:
+- **Slack:** an app with *Incoming Webhooks*.
+- **Discord:** *channel settings → Integrations → Webhooks*.
+
+jaagte-raho tells them apart from the URL. Then, in your own terminal:
+
+```
+mkdir -p ~/.config/jaagte-raho
+echo 'https://hooks.slack.com/services/…' > ~/.config/jaagte-raho/notify-url   # or your Discord webhook URL
+chmod 600 ~/.config/jaagte-raho/notify-url
+```
+
+and check it with `/jaagte-raho:notify test`. Keep the URL out of the chat with Claude: anyone who has it can post to your channel. Only `https://` URLs are used, and messages are sent in the background, so Claude is never slowed down.
 
 ## What it can't do
 
@@ -160,6 +187,8 @@ From then on, while Claude is working **and the machine is plugged in**, closing
 | Lid stays on *Do nothing* (Windows) | Run `/jaagte-raho:lid off`; it puts back the value it saved. |
 | Mac doesn't sleep at all after using the lid override | Run `/jaagte-raho:lid off`. If that fails, run `sudo pmset -a disablesleep 0` in Terminal. |
 | `Setup didn't finish` (macOS) | The password dialog was cancelled, or there's no screen to show it on (SSH). Run `/jaagte-raho:lid on` from a session on the Mac itself. |
+| `notify: the webhook didn't accept the message` | The URL is wrong or the webhook was deleted. Create a new one, update `~/.config/jaagte-raho/notify-url`, then `/jaagte-raho:notify test`. |
+| No ping while Claude waited for input    | Pings need the computer awake. If `JAAGTE_RAHO_STALL_AFTER` is longer than `JAAGTE_RAHO_INPUT_WAIT`, it may sleep first. |
 | Stays awake after an interrupted turn    | Expected for ~60 s, until Claude Code sends `idle_prompt`. If it lasts longer, run `/jaagte-raho:status` and open an issue. |
 
 ## Requirements
@@ -174,7 +203,7 @@ From then on, while Claude is working **and the machine is plugged in**, closing
 
 ## Development
 
-`tests/e2e.sh` runs a stand-in Claude process and walks a session through its whole life: idle (not held), prompt (held, and the OS reports it), turn ending with background tasks (still held), turn ending with none (released), `idle_prompt` (released), a permission prompt (held for the grace period, released after it, held again once answered), the lid override with two sessions (on while either works, put back only after the last, and after a crash), Claude exiting mid-turn and `SessionEnd` (watcher gone, lock released). CI runs it on Windows, macOS and Linux on every push.
+`tests/e2e.sh` runs a stand-in Claude process and walks a session through its whole life: idle (not held), prompt (held, and the OS reports it), turn ending with background tasks (still held), turn ending with none (released), `idle_prompt` (released), a permission prompt (held for the grace period, released after it, held again once answered), the lid override with two sessions (on while either works, put back only after the last, and after a crash), Slack and Discord notifications (a finished run, a stalled prompt, an answered one, a failing webhook, using a stand-in webhook), Claude exiting mid-turn and `SessionEnd` (watcher gone, lock released). CI runs it on Windows, macOS and Linux on every push.
 
 Before each release, also do the one thing CI can't — a real sleep test on each OS:
 

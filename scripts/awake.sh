@@ -7,6 +7,7 @@
 #   wait   Notification      permission_prompt / elicitation_dialog: Claude is waiting for your input
 #   sched  PostToolUse       a run was scheduled or cancelled (CronCreate, CronDelete, ScheduleWakeup)
 #   end    SessionEnd        stop this session's watcher
+# stop, idle and wait can also ping you (scripts/notify.sh) once a webhook is set up.
 # The watcher holds the OS lock only while <base>.busy exists or a scheduled run is due (see sched),
 # and exits when Claude exits or
 # <base>.pid is removed. Always exits 0, so it can never block Claude.
@@ -35,6 +36,16 @@ if [ -z "$sid" ] || [ -z "$dir" ]; then
 fi
 base="$dir/jaagte-raho-$sid"
 
+# Notifications (scripts/notify.sh): only when a webhook is set up, and always in the background.
+notify_on() { [ -n "${JAAGTE_RAHO_NOTIFY_URL:-}" ] || [ -s "$(dirname "$lidflag")/notify-url" ]; }
+notify_bg() { nohup bash "$root/scripts/notify.sh" "$@" </dev/null >/dev/null 2>&1 & }
+mtime() { if [ "$(uname -s)" = Darwin ]; then stat -f %m "$1"; else stat -c %Y "$1"; fi; }
+# The turn that started at <base>.busy is over: ping if it ran long enough.
+finished() {
+  [ -f "$base.busy" ] && notify_on && notify_bg finished "$base" "$(( $(date +%s) - $(mtime "$base.busy") ))"
+  rm -f "$base.busy"
+}
+
 case "$1" in
   busy)
     : > "$base.busy"
@@ -48,7 +59,7 @@ case "$1" in
   stop)
     # A non-empty background_tasks list means agents or commands are still running.
     printf '%s' "$input" | grep -Eq '"background_tasks"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]' \
-      || rm -f "$base.busy"
+      || finished
     rm -f "$base.wait"
     exit 0 ;;
   wait)
@@ -56,13 +67,15 @@ case "$1" in
     # so let the computer sleep once the grace period runs out: <base>.wait holds
     # "<since epoch s> <sleep-allowed epoch s> <transcript path>". The watcher drops it once the
     # transcript changes after <since>, i.e. you answered. JAAGTE_RAHO_INPUT_WAIT is the grace period
-    # in minutes (default 10); anything that isn't a number (e.g. "never") keeps it awake while waiting.
+    # in minutes (default 10); anything that isn't a number (e.g. "never") keeps it awake while waiting
+    # (sleep-allowed is then far in the future). With notifications on, also start the stalled ping.
     mins=${JAAGTE_RAHO_INPUT_WAIT:-10}
-    case "$mins" in ''|*[!0-9]*) exit 0 ;; esac
     [ -f "$base.busy" ] || exit 0
     now=$(date +%s)
+    case "$mins" in ''|*[!0-9]*) until=9999999999 ;; *) until=$(( now + mins * 60 )) ;; esac
     path=$(printf '%s' "$input" | sed -n 's/.*"transcript_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 | sed 's/\\\\/\\/g')
-    echo "$now $(( now + mins * 60 )) $path" > "$base.wait.tmp" && mv -f "$base.wait.tmp" "$base.wait"
+    echo "$now $until $path" > "$base.wait.tmp" && mv -f "$base.wait.tmp" "$base.wait"
+    notify_on && notify_bg stalled "$base" "$now"
     exit 0 ;;
   sched)
     # PostToolUse for CronCreate / CronDelete / ScheduleWakeup. A sleeping computer skips scheduled
@@ -97,7 +110,7 @@ case "$1" in
       rm -f "$base.sched" "$base.until"
     fi
     exit 0 ;;
-  idle) rm -f "$base.busy" "$base.wait"; exit 0 ;;
+  idle) finished; rm -f "$base.wait"; exit 0 ;;
   end) rm -f "$base.busy" "$base.wait" "$base.lid" "$base.pid" "$base.cwd" "$base.task" "$base.sched" "$base.until" \
     "$base.lid.err" "$base.log" "$base.err"; exit 0 ;;
   start) ;;

@@ -47,7 +47,9 @@ for f in "$dir"/jaagte-raho-*.pid; do
   [ -n "$folder" ] && echo "  folder: $folder"
   [ -s "$base.task" ] && echo "  last prompt ($(ago "$base.task")): \"$(cat "$base.task")\""
   if [ "$busy" = "waiting for your input" ] && [ "$until" -gt 0 ] 2>/dev/null; then
-    if [ "$until" -gt "$(date +%s)" ]; then
+    if [ "$until" -ge 9999999999 ]; then
+      echo "  waiting for your input since $(clock "$since"): kept awake until you answer (JAAGTE_RAHO_INPUT_WAIT=never)"
+    elif [ "$until" -gt "$(date +%s)" ]; then
       echo "  waiting for your input since $(clock "$since"): lets the computer sleep at $(clock "$until") if you haven't answered"
     else
       echo "  waiting for your input since $(clock "$since"): computer allowed to sleep since $(clock "$until")"
@@ -76,6 +78,9 @@ done
 for f in "$dir"/jaagte-raho-*.err "$dir"/jaagte-raho-*.log; do
   [ -s "$f" ] && echo "Last error (${f##*/}): $(head -n1 "$f")"
 done
+
+echo "--- Notifications ---"
+bash "$(dirname "$0")/notify.sh" status | head -n1
 
 echo "--- OS report ---"
 case "$(uname -s)" in

@@ -13,6 +13,9 @@ cleanup() {
   if [ -n "${lid_restore:-}" ]; then
     JAAGTE_RAHO_LID_FLAG="$work/lid" bash "$root/scripts/lid.sh" off >/dev/null 2>&1 || true
   fi
+  if [ -s "$work/hookpid" ]; then
+    if [ -n "$win" ]; then taskkill //PID "$(cat "$work/hookpid")" //F >/dev/null 2>&1; else kill "$(cat "$work/hookpid")" 2>/dev/null; fi
+  fi
   [ -n "${dir:-}" ] && rm -f "$dir"/jaagte-raho-e2e-$$-*
   rm -rf "$work"
 }
@@ -133,7 +136,9 @@ sleep 1; mkdir -p "$work/transcript/subagents"; echo '{"type":"user"}' >> "$work
 wait_for 10 held || fail "lock not held again after a subagent's permission prompt was answered"
 pass "subagent's permission prompt answered: lock held again"
 JAAGTE_RAHO_INPUT_WAIT=never hook_event wait "$sid" "$tjson"
-[ ! -f "$base.wait" ] || fail "JAAGTE_RAHO_INPUT_WAIT=never still set a grace period"
+read -r _ until_never _ < "$base.wait"
+[ "$until_never" = 9999999999 ] || fail "JAAGTE_RAHO_INPUT_WAIT=never still set a grace period ($until_never)"
+sleep 4; held || fail "lock released while waiting with JAAGTE_RAHO_INPUT_WAIT=never"
 hook_event stop "$sid" ',"background_tasks":[]'
 wait_for 10 not_held || fail "lock still held after the turn finished"
 pass "JAAGTE_RAHO_INPUT_WAIT=never: stays awake while waiting"
@@ -262,6 +267,66 @@ if [ "$(uname -s)" = Darwin ] && [ -n "${CI:-}" ] && sudo -n true 2>/dev/null; t
   [ ! -e "$rule" ] || fail "sudoers rule still there after uninstall"
   pass "macOS setup: sudoers rule valid, root-owned, 0440, pmset disablesleep only; uninstall removes it"
 fi
+
+# --- Session 6: notifications. A stand-in Slack webhook records every message it gets.
+: > "$work/hooks.txt"
+OUT="$(native "$work/hooks.txt")" PORTF="$(native "$work/hookport")" PIDF="$(native "$work/hookpid")" node -e '
+  const http = require("http"), fs = require("fs");
+  fs.writeFileSync(process.env.PIDF, String(process.pid));
+  const s = http.createServer((q, r) => {
+    let b = ""; q.on("data", d => b += d);
+    q.on("end", () => {
+      if (q.url === "/fail") { r.statusCode = 500; return r.end("no"); }
+      fs.appendFileSync(process.env.OUT, b + "\n"); r.end("ok");
+    });
+  });
+  s.listen(0, "127.0.0.1", () => fs.writeFileSync(process.env.PORTF, String(s.address().port)));
+' &
+disown $!
+wait_for 15 test -s "$work/hookport" || fail "stand-in webhook didn't start"
+export JAAGTE_RAHO_NOTIFY_URL="http://127.0.0.1:$(cat "$work/hookport")/hook"
+msgs() { wc -l < "$work/hooks.txt" | tr -d ' '; }
+got() { grep -F "$1" "$work/hooks.txt" >/dev/null; }
+
+sid="e2e-$$-f"
+start_claude "$sid"
+folder=$(basename "$work")
+hook_event busy "$sid" ',"prompt":"Refactor the parser"'
+JAAGTE_RAHO_NOTIFY_AFTER=10 hook_event stop "$sid" ',"background_tasks":[]'
+sleep 4; [ "$(msgs)" = 0 ] || fail "pinged for a run shorter than JAAGTE_RAHO_NOTIFY_AFTER: $(cat "$work/hooks.txt")"
+hook_event busy "$sid" ',"prompt":"Refactor the parser"'
+JAAGTE_RAHO_NOTIFY_AFTER=0 hook_event stop "$sid" ',"background_tasks":[]'
+wait_for 15 got "Claude finished" || fail "no ping when the run finished"
+got "in $folder: \\\"Refactor the parser\\\"" || fail "finished ping doesn't name the folder and prompt: $(cat "$work/hooks.txt")"
+got '{"text":"Claude finished' || fail "Slack webhook didn't get Slack's format: $(cat "$work/hooks.txt")"
+pass "run finished: pinged, with folder and prompt; short runs: no ping"
+
+out=$(JAAGTE_RAHO_NOTIFY_URL="http://127.0.0.1:$(cat "$work/hookport")/api/webhooks/1/abc" bash "$root/scripts/notify.sh" test)
+grep -F "Sent a test message" <<< "$out" >/dev/null || fail "Discord test message not sent: $out"
+got '{"content":"jaagte-raho test' || fail "Discord webhook didn't get Discord's format: $(cat "$work/hooks.txt")"
+pass "Discord webhook URL: Discord's message format; anything else: Slack's"
+
+hook_event busy "$sid" ',"prompt":"Refactor the parser"'
+JAAGTE_RAHO_STALL_AFTER=2s hook_event wait "$sid" "$tjson"
+wait_for 15 got "waiting for your input" || fail "no ping while Claude waited for input"
+pass "waiting for input past JAAGTE_RAHO_STALL_AFTER: pinged"
+
+n=$(msgs)
+hook_event busy "$sid" ',"prompt":"Refactor the parser"'
+JAAGTE_RAHO_STALL_AFTER=4s hook_event wait "$sid" "$tjson"
+sleep 1; echo '{"type":"user"}' >> "$transcript"   # you answered
+sleep 7; [ "$(msgs)" = "$n" ] || fail "pinged about a prompt that was already answered"
+pass "prompt answered in time: no ping"
+
+out=$(JAAGTE_RAHO_NOTIFY_URL="http://127.0.0.1:$(cat "$work/hookport")/fail" bash "$root/scripts/notify.sh" test)
+grep -F "didn't accept" <<< "$out" >/dev/null || fail "a failing webhook wasn't reported: $out"
+out=$(JAAGTE_RAHO_NOTIFY_URL="http://hooks.example.com/x" bash "$root/scripts/notify.sh" test)
+grep -F "must start with https://" <<< "$out" >/dev/null || fail "a plain-http webhook was accepted: $out"
+pass "failing or non-https webhook: reported, not sent"
+hook_event stop "$sid" ',"background_tasks":[]'
+hook_event end "$sid"
+if [ -n "$win" ]; then taskkill //PID "$claude" //F >/dev/null; else kill "$claude"; fi
+unset JAAGTE_RAHO_NOTIFY_URL
 
 # --- Session 3: SessionEnd (e.g. /clear) stops the watcher while Claude keeps running
 sid="e2e-$$-b"
