@@ -323,6 +323,29 @@ grep -F "didn't accept" <<< "$out" >/dev/null || fail "a failing webhook wasn't 
 out=$(JAAGTE_RAHO_NOTIFY_URL="http://hooks.example.com/x" bash "$root/scripts/notify.sh" test)
 grep -F "must start with https://" <<< "$out" >/dev/null || fail "a plain-http webhook was accepted: $out"
 pass "failing or non-https webhook: reported, not sent"
+
+# Connecting: connect slack prints (instead of opening, in tests) a create-app link whose manifest
+# asks only for incoming-webhook; save takes the URL from the clipboard, never from the chat.
+link=$(JAAGTE_RAHO_NO_BROWSER=1 bash "$root/scripts/notify.sh" connect slack | grep -o 'https://api.slack.com/apps?new_app=1&manifest_json=[^ ]*')
+[ -n "$link" ] || fail "connect slack gave no create-app link"
+LINK="$link" node -e '
+  const m = JSON.parse(decodeURIComponent(process.env.LINK.split("manifest_json=")[1]));
+  if (m.display_information.name !== "jaagte-raho" || JSON.stringify(m.oauth_config.scopes) !== "{\"bot\":[\"incoming-webhook\"]}") process.exit(1);
+' || fail "create-app manifest isn't jaagte-raho with only the incoming-webhook scope"
+hookurl="http://127.0.0.1:$(cat "$work/hookport")/saved"
+cfg="$work/cfg"; mkdir -p "$cfg"
+save() { JAAGTE_RAHO_LID_FLAG="$cfg/lid" JAAGTE_RAHO_NOTIFY_URL= JAAGTE_RAHO_TEST_CLIPBOARD="$1" bash "$root/scripts/notify.sh" save; }
+out=$(save "not a webhook https://example.com/secret")
+grep -F "Not saved" <<< "$out" >/dev/null && [ ! -e "$cfg/notify-url" ] || fail "saved something that isn't a webhook URL: $out"
+grep -F "example.com" <<< "$out" >/dev/null && fail "save printed the clipboard's contents: $out"
+out=$(save "$hookurl")
+[ "$(cat "$cfg/notify-url")" = "$hookurl" ] || fail "save didn't store the webhook URL: $out"
+grep -F "$hookurl" <<< "$out" >/dev/null && fail "save printed the webhook URL: $out"
+wait_for 10 got "jaagte-raho is connected" || fail "save didn't send a test message: $out"
+[ -n "$win" ] || [ "$(ls -l "$cfg/notify-url" | cut -c1-10)" = "-rw-------" ] || fail "notify-url is readable by others: $(ls -l "$cfg/notify-url")"
+JAAGTE_RAHO_LID_FLAG="$cfg/lid" bash "$root/scripts/notify.sh" off >/dev/null
+[ ! -e "$cfg/notify-url" ] || fail "notify off didn't remove the webhook URL"
+pass "connect: Slack create-app link; save: from clipboard, validated, never printed, private; off removes it"
 hook_event stop "$sid" ',"background_tasks":[]'
 hook_event end "$sid"
 if [ -n "$win" ]; then taskkill //PID "$claude" //F >/dev/null; else kill "$claude"; fi

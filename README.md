@@ -23,7 +23,7 @@ Start a new session and you're done.
 |---------|--------------|
 | `/jaagte-raho:status` | Shows whether each session is keeping the computer awake, and why |
 | `/jaagte-raho:lid on` / `off` | Keep Claude working with the lid closed while plugged in ([details](#closing-the-lid)) |
-| `/jaagte-raho:notify` / `test` | Slack or Discord pings when a long run finishes or Claude waits for you ([details](#notifications)) |
+| `/jaagte-raho:notify connect slack` / `discord`, then `save` | Slack or Discord pings when a long run finishes or Claude waits for you ([details](#notifications)) |
 
 ## What it does
 
@@ -152,19 +152,24 @@ A lot of lost time isn't the run stopping. It's not noticing that it finished, o
 
 Each ping says which machine, which project folder, how long, and the start of your prompt.
 
-To turn it on, create a webhook:
-- **Slack:** an app with *Incoming Webhooks*.
-- **Discord:** *channel settings → Integrations → Webhooks*.
-
-jaagte-raho tells them apart from the URL. Then, in your own terminal:
+To turn it on:
 
 ```
-mkdir -p ~/.config/jaagte-raho
-echo 'https://hooks.slack.com/services/…' > ~/.config/jaagte-raho/notify-url   # or your Discord webhook URL
-chmod 600 ~/.config/jaagte-raho/notify-url
+/jaagte-raho:notify connect slack      # or: connect discord
 ```
 
-and check it with `/jaagte-raho:notify test`. Keep the URL out of the chat with Claude: anyone who has it can post to your channel. Only `https://` URLs are used, and messages are sent in the background, so Claude is never slowed down.
+- **Slack** opens in your browser on a *create app* page that's already filled in: name *jaagte-raho*, and only the permission to post via an incoming webhook. Log in, pick your workspace, click **Create**, then **Install to Workspace**, choose the channel, and **Copy** the webhook URL.
+- **Discord** can't link straight to its settings, so it shows the steps: *channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL*.
+
+Then:
+
+```
+/jaagte-raho:notify save
+```
+
+It reads the URL from your **clipboard**, so the URL never goes into the chat or the output, and anyone who has it could post to your channel. It checks that the URL is a real Slack or Discord webhook, saves it to `~/.config/jaagte-raho/notify-url` (readable only by you), and sends a test message. jaagte-raho tells Slack and Discord apart by the URL.
+
+`/jaagte-raho:notify test` sends another test message, `/jaagte-raho:notify off` disconnects, and `/jaagte-raho:notify` shows the current state. Nothing goes through a jaagte-raho server: messages go straight from your machine to Slack or Discord, in the background, so Claude is never slowed down. Other Slack-compatible webhooks (Mattermost, Google Chat) work too: put the URL in `notify-url` yourself, or set `JAAGTE_RAHO_NOTIFY_URL`.
 
 ## What it can't do
 
@@ -187,7 +192,7 @@ and check it with `/jaagte-raho:notify test`. Keep the URL out of the chat with 
 | Lid stays on *Do nothing* (Windows) | Run `/jaagte-raho:lid off`; it puts back the value it saved. |
 | Mac doesn't sleep at all after using the lid override | Run `/jaagte-raho:lid off`. If that fails, run `sudo pmset -a disablesleep 0` in Terminal. |
 | `Setup didn't finish` (macOS) | The password dialog was cancelled, or there's no screen to show it on (SSH). Run `/jaagte-raho:lid on` from a session on the Mac itself. |
-| `notify: the webhook didn't accept the message` | The URL is wrong or the webhook was deleted. Create a new one, update `~/.config/jaagte-raho/notify-url`, then `/jaagte-raho:notify test`. |
+| `notify: the webhook didn't accept the message` | The URL is wrong or the webhook was deleted. Run `/jaagte-raho:notify connect slack` (or `discord`) again to make a new one, then `/jaagte-raho:notify save`. |
 | No ping while Claude waited for input    | Pings need the computer awake. If `JAAGTE_RAHO_STALL_AFTER` is longer than `JAAGTE_RAHO_INPUT_WAIT`, it may sleep first. |
 | Stays awake after an interrupted turn    | Expected for ~60 s, until Claude Code sends `idle_prompt`. If it lasts longer, run `/jaagte-raho:status` and open an issue. |
 
