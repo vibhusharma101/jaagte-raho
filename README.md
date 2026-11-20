@@ -167,7 +167,7 @@ Then:
 /jaagte-raho:notify save
 ```
 
-It reads the URL from your **clipboard**, so the URL never goes into the chat or the output, and anyone who has it could post to your channel. It checks that the URL is a real Slack or Discord webhook, saves it to `~/.config/jaagte-raho/notify-url` (readable only by you), and sends a test message. jaagte-raho tells Slack and Discord apart by the URL.
+It reads the URL from your **clipboard**, so it never goes into the chat or the output. That matters, because anyone who has the URL can post to your channel. It checks that the URL is a real Slack or Discord webhook, saves it to `~/.config/jaagte-raho/notify-url` (readable only by you), and sends a test message. jaagte-raho tells Slack and Discord apart by the URL.
 
 `/jaagte-raho:notify test` sends another test message, `/jaagte-raho:notify off` disconnects, and `/jaagte-raho:notify` shows the current state. Nothing goes through a jaagte-raho server: messages go straight from your machine to Slack or Discord, in the background, so Claude is never slowed down. Other Slack-compatible webhooks (Mattermost, Google Chat) work too: put the URL in `notify-url` yourself, or set `JAAGTE_RAHO_NOTIFY_URL`.
 
